@@ -49,6 +49,10 @@
             <Button Content="打招呼"
                     Padding="16,6"
                     Click="GreetButton_Click"/>
+            <Button Content="清空" 
+                    Padding="16,6" 
+                    Margin="8,0,0,0" 
+                    Click="ClearButton_Click"/>
         </StackPanel>
 
         <!-- 第 3 行：显示结果 -->

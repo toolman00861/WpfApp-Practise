@@ -29,5 +29,11 @@ namespace WpfApp2
 
             ResultTextBlock.Text = "你好，" + name + "！这就是 XAML + C# 的基本写法。";
         }
+
+        private void ClearButton_Click(object obj, RoutedEventArgs e)
+        {
+            NameTextBox.Text = "";
+            ResultTextBlock.Text = "";
+        }
     }
 }
