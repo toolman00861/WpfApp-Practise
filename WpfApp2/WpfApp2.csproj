@@ -72,6 +72,8 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BindableBase.cs" />
+    <Compile Include="MainViewModel.cs" />
     <Compile Include="Model\CellCheck.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>

@@ -5,61 +5,124 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WpfApp2"
         mc:Ignorable="d"
-        Title="WPF 入门"
-        Height="450"
-        Width="640">
+        Title="电芯检测 — 表单与表格"
+        Height="560"
+        Width="900">
     <!--
-        Window 是这个窗口的根。
-        一个 Window 里通常只能有一个直接子元素，所以用 Grid / StackPanel 来“装”其它控件。
+        外层 Grid ≈ CSS Grid：先切页面区域。
+        一行里并排的控件用 StackPanel（≈ flex-direction: row）。
     -->
     <Grid Margin="20">
-        <!--
-            把窗口分成 4 行：
-            Auto = 按内容高度
-            *    = 吃掉剩下的空间
-        -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- 第 0 行：标题 -->
         <TextBlock Grid.Row="0"
-                   Text="Hello WPF"
-                   FontSize="28"
+                   Text="电芯检测记录"
+                   FontSize="24"
                    FontWeight="SemiBold"/>
 
         <TextBlock Grid.Row="1"
-                   Margin="0,8,0,0"
-                   Text="在下面输入名字，点按钮，看界面如何和 C# 代码配合。"
-                   Foreground="Gray"/>
+                   Margin="0,6,0,0"
+                   Foreground="Gray"
+                   Text="表单绑的是 Draft* 属性（类似 Vue 的 v-model）。点一行会回填；「保存选中」写回该行。"/>
 
-        <!-- 第 2 行：横向摆放 标签 + 输入框 + 按钮 -->
+        <!-- TextBox 默认就会把输入写回属性；UpdateSourceTrigger=PropertyChanged 表示每打一个字就写回 -->
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
-                    Margin="0,20,0,0">
-            <TextBlock Text="名字："
-                       VerticalAlignment="Center"/>
-            <TextBox x:Name="NameTextBox"
-                     Width="220"
-                     Margin="8,0"
-                     Padding="4"/>
-            <Button Content="打招呼"
+                    Margin="0,16,0,12">
+            <TextBlock Text="条码" VerticalAlignment="Center"/>
+            <TextBox Width="140"
+                     Margin="8,0,16,0"
+                     Padding="4"
+                     VerticalContentAlignment="Center"
+                     Text="{Binding DraftBarcode, UpdateSourceTrigger=PropertyChanged}"/>
+
+            <TextBlock Text="电压" VerticalAlignment="Center"/>
+            <TextBox Width="80"
+                     Margin="8,0,16,0"
+                     Padding="4"
+                     VerticalContentAlignment="Center"
+                     Text="{Binding DraftVoltage, UpdateSourceTrigger=PropertyChanged}"/>
+
+            <TextBlock Text="结果" VerticalAlignment="Center"/>
+            <ComboBox Width="80"
+                      Margin="8,0,16,0"
+                      ItemsSource="{Binding ResultOptions}"
+                      SelectedItem="{Binding DraftResult}"/>
+
+            <Button Content="新增"
                     Padding="16,6"
-                    Click="GreetButton_Click"/>
-            <Button Content="清空" 
-                    Padding="16,6" 
-                    Margin="8,0,0,0" 
-                    Click="ClearButton_Click"/>
+                    Click="AddButton_Click"/>
+            <Button Content="保存选中"
+                    Padding="16,6"
+                    Margin="8,0,0,0"
+                    Click="SaveButton_Click"/>
+            <Button Content="清空表单"
+                    Padding="16,6"
+                    Margin="8,0,0,0"
+                    Click="ClearFormButton_Click"/>
+            <Button Content="删除选中行"
+                    Padding="16,6"
+                    Margin="8,0,0,0"
+                    Click="DeleteButton_Click"/>
         </StackPanel>
 
-        <!-- 第 3 行：显示结果 -->
-        <TextBlock x:Name="ResultTextBlock"
-                   Grid.Row="3"
-                   Margin="0,24,0,0"
-                   FontSize="18"
-                   Text="还没有打招呼。"/>
+        <!-- DataGrid ≈ 网页里的 <table>，但默认只有滚动条，没有分页器 -->
+        <DataGrid x:Name="RecordGrid"
+                  Grid.Row="3"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  HeadersVisibility="Column"
+                  SelectionMode="Single"
+                  SelectionUnit="FullRow"
+                  GridLinesVisibility="Horizontal"
+                  SelectedItem="{Binding SelectedRecord}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="条码"
+                                    Binding="{Binding Barcode}"
+                                    Width="*"/>
+                <DataGridTextColumn Header="电压(V)"
+                                    Binding="{Binding Voltage, StringFormat=F3}"
+                                    Width="100"/>
+                <DataGridTextColumn Header="结果"
+                                    Binding="{Binding Result}"
+                                    Width="80"/>
+                <DataGridTextColumn Header="时间"
+                                    Binding="{Binding Time, StringFormat=yyyy-MM-dd HH:mm:ss}"
+                                    Width="180"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- 底栏：同一格里左对齐 + 右对齐 ≈ flex space-between -->
+        <Grid Grid.Row="4" Margin="0,12,0,0">
+            <!-- 绑的是窗口上的 StatusMessage 属性，不是控件名 -->
+            <TextBlock VerticalAlignment="Center"
+                       Foreground="Gray"
+                       Text="{Binding StatusMessage}"/>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <TextBlock VerticalAlignment="Center"
+                           Margin="0,0,12,0"
+                           Text="{Binding PageMessage}"/>
+                <Button x:Name="PrevButton"
+                        Content="上一页"
+                        Padding="12,4"
+                        Click="PrevButton_Click"/>
+                <Button x:Name="NextButton"
+                        Content="下一页"
+                        Padding="12,4"
+                        Margin="8,0,0,0"
+                        Click="NextButton_Click"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

@@ -1,39 +1,190 @@
-﻿using System.Windows;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Windows;
+using WpfApp2.Model;
 
 namespace WpfApp2
 {
-    /// <summary>
-    /// 和 MainWindow.xaml 是一对：XAML 画界面，这里写逻辑。
-    /// partial 表示类被拆成两部分，编译时会和 XAML 生成的代码合并。
-    /// </summary>
     public partial class MainWindow : Window
     {
+        private readonly MainViewModel _vm = new MainViewModel();
+
+        private readonly List<CellRecord> _allRecords = new List<CellRecord>();
+
+        private int _pageIndex;
+        private const int PageSize = 8;
+
         public MainWindow()
         {
-            // 必须先调用：把 XAML 里的控件创建出来，x:Name 才能用。
             InitializeComponent();
+            DataContext = _vm;
+            SeedDemoData();
+            RefreshPage();
         }
 
-        /// <summary>
-        /// 对应 XAML 里 Button 的 Click="GreetButton_Click"
-        /// </summary>
-        private void GreetButton_Click(object sender, RoutedEventArgs e)
+        private void AddButton_Click(object sender, RoutedEventArgs e)
         {
-            string name = NameTextBox.Text.Trim();
-
-            if (string.IsNullOrEmpty(name))
+            CellRecord record;
+            if (!TryReadDraft(out record))
             {
-                ResultTextBlock.Text = "请先输入名字。";
                 return;
             }
 
-            ResultTextBlock.Text = "你好，" + name + "！这就是 XAML + C# 的基本写法。";
+            record.Time = DateTime.Now;
+            _allRecords.Insert(0, record);
+            _pageIndex = 0;
+            _vm.ClearDraft();
+            RefreshPage();
+            _vm.StatusMessage = "已新增 " + record.Barcode + "。";
         }
 
-        private void ClearButton_Click(object obj, RoutedEventArgs e)
+        private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
-            NameTextBox.Text = "";
-            ResultTextBlock.Text = "";
+            if (_vm.SelectedRecord == null)
+            {
+                _vm.StatusMessage = "请先在表格里选中一行。";
+                return;
+            }
+
+            CellRecord draft;
+            if (!TryReadDraft(out draft))
+            {
+                return;
+            }
+
+            _vm.SelectedRecord.Barcode = draft.Barcode;
+            _vm.SelectedRecord.Voltage = draft.Voltage;
+            _vm.SelectedRecord.Result = draft.Result;
+            RefreshPage();
+            _vm.StatusMessage = "已保存 " + draft.Barcode + "。";
+        }
+
+        private void ClearFormButton_Click(object sender, RoutedEventArgs e)
+        {
+            _vm.ClearDraft();
+            _vm.StatusMessage = "表单已清空。";
+        }
+
+        private void DeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = _vm.SelectedRecord;
+            if (selected == null)
+            {
+                _vm.StatusMessage = "请先在表格里选中一行。";
+                return;
+            }
+
+            _allRecords.Remove(selected);
+            _vm.ClearDraft();
+            RefreshPage();
+            _vm.StatusMessage = "已删除 " + selected.Barcode + "。";
+        }
+
+        private void PrevButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_pageIndex > 0)
+            {
+                _pageIndex--;
+                RefreshPage();
+            }
+        }
+
+        private void NextButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_pageIndex < GetTotalPages() - 1)
+            {
+                _pageIndex++;
+                RefreshPage();
+            }
+        }
+
+        private bool TryReadDraft(out CellRecord record)
+        {
+            record = null;
+            string barcode = (_vm.DraftBarcode ?? "").Trim();
+            if (string.IsNullOrEmpty(barcode))
+            {
+                _vm.StatusMessage = "条码不能为空。";
+                return false;
+            }
+
+            double voltage;
+            if (!double.TryParse((_vm.DraftVoltage ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out voltage)
+                && !double.TryParse((_vm.DraftVoltage ?? "").Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out voltage))
+            {
+                _vm.StatusMessage = "电压必须是数字，例如 3.72。";
+                return false;
+            }
+
+            record = new CellRecord
+            {
+                Barcode = barcode,
+                Voltage = voltage,
+                Result = string.IsNullOrEmpty(_vm.DraftResult) ? "OK" : _vm.DraftResult
+            };
+            return true;
+        }
+
+        private void RefreshPage()
+        {
+            int totalPages = GetTotalPages();
+            if (_pageIndex >= totalPages)
+            {
+                _pageIndex = totalPages - 1;
+            }
+            if (_pageIndex < 0)
+            {
+                _pageIndex = 0;
+            }
+
+            var page = _allRecords
+                .Skip(_pageIndex * PageSize)
+                .Take(PageSize)
+                .ToList();
+
+            var keep = _vm.SelectedRecord;
+            RecordGrid.ItemsSource = page;
+            if (keep != null && page.Contains(keep))
+            {
+                RecordGrid.SelectedItem = keep;
+            }
+
+            _vm.PageMessage = string.Format(
+                "第 {0} / {1} 页（共 {2} 条）",
+                _allRecords.Count == 0 ? 0 : _pageIndex + 1,
+                _allRecords.Count == 0 ? 0 : totalPages,
+                _allRecords.Count);
+
+            PrevButton.IsEnabled = _pageIndex > 0;
+            NextButton.IsEnabled = _pageIndex < totalPages - 1 && _allRecords.Count > 0;
+        }
+
+        private int GetTotalPages()
+        {
+            if (_allRecords.Count == 0)
+            {
+                return 1;
+            }
+
+            return (int)Math.Ceiling(_allRecords.Count / (double)PageSize);
+        }
+
+        private void SeedDemoData()
+        {
+            var random = new Random(1);
+            for (int i = 1; i <= 23; i++)
+            {
+                double voltage = 3.50 + random.NextDouble() * 0.40;
+                _allRecords.Add(new CellRecord
+                {
+                    Barcode = "CELL-" + i.ToString("000"),
+                    Voltage = Math.Round(voltage, 3),
+                    Result = voltage >= 3.60 ? "OK" : "NG",
+                    Time = DateTime.Now.AddMinutes(-i)
+                });
+            }
         }
     }
 }
