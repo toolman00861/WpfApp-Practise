@@ -1,0 +1,61 @@
+﻿<Window x:Class="WpfApp2.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WpfApp2"
+        mc:Ignorable="d"
+        Title="WPF 入门"
+        Height="450"
+        Width="640">
+    <!--
+        Window 是这个窗口的根。
+        一个 Window 里通常只能有一个直接子元素，所以用 Grid / StackPanel 来“装”其它控件。
+    -->
+    <Grid Margin="20">
+        <!--
+            把窗口分成 4 行：
+            Auto = 按内容高度
+            *    = 吃掉剩下的空间
+        -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 第 0 行：标题 -->
+        <TextBlock Grid.Row="0"
+                   Text="Hello WPF"
+                   FontSize="28"
+                   FontWeight="SemiBold"/>
+
+        <TextBlock Grid.Row="1"
+                   Margin="0,8,0,0"
+                   Text="在下面输入名字，点按钮，看界面如何和 C# 代码配合。"
+                   Foreground="Gray"/>
+
+        <!-- 第 2 行：横向摆放 标签 + 输入框 + 按钮 -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    Margin="0,20,0,0">
+            <TextBlock Text="名字："
+                       VerticalAlignment="Center"/>
+            <TextBox x:Name="NameTextBox"
+                     Width="220"
+                     Margin="8,0"
+                     Padding="4"/>
+            <Button Content="打招呼"
+                    Padding="16,6"
+                    Click="GreetButton_Click"/>
+        </StackPanel>
+
+        <!-- 第 3 行：显示结果 -->
+        <TextBlock x:Name="ResultTextBlock"
+                   Grid.Row="3"
+                   Margin="0,24,0,0"
+                   FontSize="18"
+                   Text="还没有打招呼。"/>
+    </Grid>
+</Window>
