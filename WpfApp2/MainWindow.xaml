@@ -9,114 +9,40 @@
         Height="560"
         Width="900">
     <!--
-        外层 Grid ≈ CSS Grid：先切页面区域。
-        一行里并排的控件用 StackPanel（≈ flex-direction: row）。
+        主窗口只当「外壳」：上面换页按钮，中间 ContentControl 装当前页。
+        这和网页里 <router-view> 是同一个思路。
+        两个页是 UserControl，所以用 ContentControl.Content = 某个控件。
+        如果页是 Page，则改用 Frame + Navigate()。
     -->
-    <Grid Margin="20">
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
-                   Text="电芯检测记录"
-                   FontSize="24"
-                   FontWeight="SemiBold"/>
-
-        <TextBlock Grid.Row="1"
-                   Margin="0,6,0,0"
-                   Foreground="Gray"
-                   Text="表单绑的是 Draft* 属性（类似 Vue 的 v-model）。点一行会回填；「保存选中」写回该行。"/>
-
-        <!-- TextBox 默认就会把输入写回属性；UpdateSourceTrigger=PropertyChanged 表示每打一个字就写回 -->
-        <StackPanel Grid.Row="2"
+        <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
-                    Margin="0,16,0,12">
-            <TextBlock Text="条码" VerticalAlignment="Center"/>
-            <TextBox Width="140"
-                     Margin="8,0,16,0"
-                     Padding="4"
-                     VerticalContentAlignment="Center"
-                     Text="{Binding DraftBarcode, UpdateSourceTrigger=PropertyChanged}"/>
-
-            <TextBlock Text="电压" VerticalAlignment="Center"/>
-            <TextBox Width="80"
-                     Margin="8,0,16,0"
-                     Padding="4"
-                     VerticalContentAlignment="Center"
-                     Text="{Binding DraftVoltage, UpdateSourceTrigger=PropertyChanged}"/>
-
-            <Button Content="新增"
+                    Margin="20,16,20,8">
+            <Button x:Name="JudgeNavButton"
+                    Content="判定录入"
                     Padding="16,6"
-                    Click="AddButton_Click"/>
-            <Button Content="保存选中"
+                    Click="JudgeNavButton_Click"/>
+            <Button x:Name="RecordNavButton"
+                    Content="检测记录"
                     Padding="16,6"
                     Margin="8,0,0,0"
-                    Click="SaveButton_Click"/>
-            <Button Content="清空表单"
-                    Padding="16,6"
-                    Margin="8,0,0,0"
-                    Click="ClearFormButton_Click"/>
-            <Button Content="删除选中行"
-                    Padding="16,6"
-                    Margin="8,0,0,0"
-                    Click="DeleteButton_Click"/>
+                    Click="RecordNavButton_Click"/>
         </StackPanel>
 
-        <!-- DataGrid ≈ 网页里的 <table>，但默认只有滚动条，没有分页器 -->
-        <DataGrid x:Name="RecordGrid"
-                  Grid.Row="3"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False"
-                  CanUserDeleteRows="False"
-                  HeadersVisibility="Column"
-                  SelectionMode="Single"
-                  SelectionUnit="FullRow"
-                  GridLinesVisibility="Horizontal"
-                  SelectedItem="{Binding SelectedRecord}">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="条码"
-                                    Binding="{Binding Barcode}"
-                                    Width="*"/>
-                <DataGridTextColumn Header="电压(V)"
-                                    Binding="{Binding Voltage, StringFormat=F3}"
-                                    Width="100"/>
-                <DataGridTextColumn Header="结果"
-                                    Binding="{Binding Result}"
-                                    Width="80"/>
-                <DataGridTextColumn Header="时间"
-                                    Binding="{Binding Time, StringFormat=yyyy-MM-dd HH:mm:ss}"
-                                    Width="180"/>
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- 换页容器：同一时刻只显示一个 UserControl -->
+        <ContentControl x:Name="PageHost"
+                        Grid.Row="1"
+                        Margin="20,8,20,8"/>
 
-        <!-- 底栏：同一格里左对齐 + 右对齐 ≈ flex space-between -->
-        <Grid Grid.Row="4" Margin="0,12,0,0">
-            <!-- 绑的是窗口上的 StatusMessage 属性，不是控件名 -->
-            <TextBlock VerticalAlignment="Center"
-                       Foreground="Gray"
-                       Text="{Binding StatusMessage}"/>
-
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center">
-                <TextBlock VerticalAlignment="Center"
-                           Margin="0,0,12,0"
-                           Text="{Binding PageMessage}"/>
-                <Button x:Name="PrevButton"
-                        Content="上一页"
-                        Padding="12,4"
-                        Click="PrevButton_Click"/>
-                <Button x:Name="NextButton"
-                        Content="下一页"
-                        Padding="12,4"
-                        Margin="8,0,0,0"
-                        Click="NextButton_Click"/>
-            </StackPanel>
-        </Grid>
+        <TextBlock Grid.Row="2"
+                   Margin="20,0,20,16"
+                   Foreground="Gray"
+                   Text="{Binding StatusMessage}"/>
     </Grid>
 </Window>
