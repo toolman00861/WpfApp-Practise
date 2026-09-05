@@ -33,6 +33,11 @@
                     Padding="16,6"
                     Margin="8,0,0,0"
                     Click="RecordNavButton_Click"/>
+            <Button x:Name="SettingNavButton"
+                    Content="设置"
+                    Padding="16,6"
+                    Margin="8,0,0,0"
+                    Click="SettingNavButton_Click"/>
         </StackPanel>
 
         <!-- 换页容器：同一时刻只显示一个 UserControl -->

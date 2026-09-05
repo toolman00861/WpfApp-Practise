@@ -97,6 +97,25 @@ namespace WpfApp2
         {
             SeedDemoData();
             RefreshPage();
+            SpecStore.Changed += OnSpecChanged;
+        }
+
+        private void OnSpecChanged(object sender, EventArgs e)
+        {
+            ReapplySpec();
+        }
+
+        /// <summary>
+        /// 阈值变了：每条记录的 Result 重新判定，再换一份 PagedRecords 让表格重绑。
+        /// </summary>
+        public void ReapplySpec()
+        {
+            foreach (var record in _allRecords)
+            {
+                record.RecalcResult();
+            }
+
+            RefreshPage();
         }
 
         public void AddFromDraft()
@@ -197,9 +216,9 @@ namespace WpfApp2
             record = new CellRecord
             {
                 Barcode = barcode,
-                Voltage = voltage,
-                Result = voltage >= SpecStore.Spec.VoltMin && voltage <= SpecStore.Spec.VoltMax ? "OK" : "NG"
+                Voltage = voltage
             };
+            record.RecalcResult();
             return true;
         }
 
@@ -253,13 +272,14 @@ namespace WpfApp2
             for (int i = 1; i <= 23; i++)
             {
                 double voltage = 3.50 + random.NextDouble() * 0.40;
-                _allRecords.Add(new CellRecord
+                var record = new CellRecord
                 {
                     Barcode = "CELL-" + i.ToString("000"),
                     Voltage = Math.Round(voltage, 3),
-                    Result = voltage >= SpecStore.Spec.VoltMin && voltage <= SpecStore.Spec.VoltMax ? "OK" : "NG",
                     Time = DateTime.Now.AddMinutes(-i)
-                });
+                };
+                record.RecalcResult();
+                _allRecords.Add(record);
             }
         }
     }

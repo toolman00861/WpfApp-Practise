@@ -14,6 +14,11 @@ namespace WpfApp2.Services
         public static VoltageSpec Spec { get; set; }
         public static string path;
 
+        /// <summary>
+        /// 阈值写入成功后通知。MainViewModel 和窗口同寿，订这个静态事件不用退订。
+        /// </summary>
+        public static event EventHandler Changed;
+
         public static VoltageSpec Load()
         {
             path = Path.Combine(AppContext.BaseDirectory, "spec.json");
@@ -32,6 +37,27 @@ namespace WpfApp2.Services
 
             Spec = JsonSerializer.Deserialize<VoltageSpec>(json, options) ?? new VoltageSpec();
             return Spec;
+        }
+
+        public static void Save()
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                path = Path.Combine(AppContext.BaseDirectory, "spec.json");
+            }
+
+            if (Spec == null)
+            {
+                Spec = new VoltageSpec();
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true
+            };
+
+            File.WriteAllText(path, JsonSerializer.Serialize(Spec, options));
+            Changed?.Invoke(null, EventArgs.Empty);
         }
     }
 }
