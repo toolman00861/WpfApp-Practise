@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using WpfApp2.Model;
+using WpfApp2.Services;
 
 namespace WpfApp2
 {
@@ -122,7 +123,7 @@ namespace WpfApp2
             {
                 Barcode = barcode,
                 Voltage = voltage,
-                Result = string.IsNullOrEmpty(_vm.DraftResult) ? "OK" : _vm.DraftResult
+                Result = voltage >= SpecStore.Spec.VoltMin && voltage <= SpecStore.Spec.VoltMax ? "OK" : "NG"
             };
             return true;
         }
@@ -181,7 +182,7 @@ namespace WpfApp2
                 {
                     Barcode = "CELL-" + i.ToString("000"),
                     Voltage = Math.Round(voltage, 3),
-                    Result = voltage >= 3.60 ? "OK" : "NG",
+                    Result = voltage >= SpecStore.Spec.VoltMin && voltage <= SpecStore.Spec.VoltMax ? "OK" : "NG",
                     Time = DateTime.Now.AddMinutes(-i)
                 });
             }

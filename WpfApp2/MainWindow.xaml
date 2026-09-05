@@ -49,12 +49,6 @@
                      VerticalContentAlignment="Center"
                      Text="{Binding DraftVoltage, UpdateSourceTrigger=PropertyChanged}"/>
 
-            <TextBlock Text="结果" VerticalAlignment="Center"/>
-            <ComboBox Width="80"
-                      Margin="8,0,16,0"
-                      ItemsSource="{Binding ResultOptions}"
-                      SelectedItem="{Binding DraftResult}"/>
-
             <Button Content="新增"
                     Padding="16,6"
                     Click="AddButton_Click"/>

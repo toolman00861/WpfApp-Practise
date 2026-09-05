@@ -5,6 +5,7 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using WpfApp2.Services;
 
 namespace WpfApp2
 {
@@ -13,5 +14,9 @@ namespace WpfApp2
     /// </summary>
     public partial class App : Application
     {
+        public App()
+        {
+            SpecStore.Load();
+        }
     }
 }

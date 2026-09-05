@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using WpfApp2.Model;
 
@@ -41,6 +42,7 @@ namespace WpfApp2
             set { SetProperty(ref _draftVoltage, value); }
         }
 
+        [Obsolete]
         public string DraftResult
         {
             get { return _draftResult; }
@@ -61,7 +63,7 @@ namespace WpfApp2
                 {
                     DraftBarcode = value.Barcode;
                     DraftVoltage = value.Voltage.ToString("F3");
-                    DraftResult = value.Result;
+                    //DraftResult = value.Result;
                 }
             }
         }
@@ -71,7 +73,7 @@ namespace WpfApp2
             SelectedRecord = null;
             DraftBarcode = "";
             DraftVoltage = "";
-            DraftResult = "OK";
+            //DraftResult = "OK";
         }
     }
 }
