@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Windows.Input;
+using System.Windows.Navigation;
 using WpfApp2.Model;
 using WpfApp2.Services;
 
@@ -28,6 +30,18 @@ namespace WpfApp2
 
         public List<string> ResultOptions { get; } = new List<string> { "OK", "NG" };
 
+        /// <summary>
+        /// 给「新增」按钮绑的命令。XAML 写 Command="{Binding AddCommand}"。
+        /// </summary>
+        public ICommand AddCommand { get; }
+        public ICommand SaveCommand { get; }
+        public ICommand ClearCommand { get; }
+        public ICommand DeleteCommand { get; }
+        public ICommand PrevCommand { get; }
+        public ICommand NextCommand { get; }
+        public ICommand SaveSpecCommand { get; }
+
+
         public string StatusMessage
         {
             get { return _statusMessage; }
@@ -43,7 +57,13 @@ namespace WpfApp2
         public string DraftBarcode
         {
             get { return _draftBarcode; }
-            set { SetProperty(ref _draftBarcode, value); }
+            set
+            {
+                if (SetProperty(ref _draftBarcode, value) && AddCommand is RelayCommand addCommand)
+                {
+                    addCommand.RaiseCanExecuteChanged();
+                }
+            }
         }
 
         public string DraftVoltage
@@ -74,6 +94,16 @@ namespace WpfApp2
                     DraftBarcode = value.Barcode;
                     DraftVoltage = value.Voltage.ToString("F3");
                 }
+                // 如果更新
+                if (SaveCommand is RelayCommand saveCommand)
+                {
+                    saveCommand.RaiseCanExecuteChanged();
+                }
+                if (DeleteCommand is RelayCommand deleteCommand)
+                {
+                    deleteCommand.RaiseCanExecuteChanged();
+                }
+
             }
         }
 
@@ -95,9 +125,25 @@ namespace WpfApp2
 
         public MainViewModel()
         {
+            AddCommand = new RelayCommand(AddFromDraft, CanAddFromDraft);
+            SaveCommand = new RelayCommand(SaveSelected, CanSaveSelected);
+            ClearCommand = new RelayCommand(ClearDraft);
+            DeleteCommand = new RelayCommand(DeleteSelected, CanSaveSelected);
+            PrevCommand = new RelayCommand(GoToPrevPage, ()=> CanGoPrev);
+            NextCommand = new RelayCommand(GoToNextPage, () => CanGoNext);
             SeedDemoData();
             RefreshPage();
             SpecStore.Changed += OnSpecChanged;
+        }
+
+        private bool CanSaveSelected()
+        {
+            return _selectedRecord != null;
+        }
+
+        private bool CanAddFromDraft()
+        {
+            return !string.IsNullOrWhiteSpace(DraftBarcode);
         }
 
         private void OnSpecChanged(object sender, EventArgs e)
@@ -254,6 +300,8 @@ namespace WpfApp2
 
             OnPropertyChanged(nameof(CanGoPrev));
             OnPropertyChanged(nameof(CanGoNext));
+            (PrevCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (NextCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private int GetTotalPages()

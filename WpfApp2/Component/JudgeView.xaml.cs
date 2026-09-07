@@ -18,14 +18,6 @@ namespace WpfApp2.Component
             get { return DataContext as MainViewModel; }
         }
 
-        private void AddButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (Vm != null)
-            {
-                Vm.AddFromDraft();
-            }
-        }
-
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
             if (Vm != null)
