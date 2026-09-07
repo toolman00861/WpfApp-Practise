@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
-using System.Windows.Navigation;
+using SqlSugar;
+using WpfApp2.Database;
 using WpfApp2.Model;
 using WpfApp2.Services;
 
@@ -17,7 +18,6 @@ namespace WpfApp2
     {
         private const int PageSize = 8;
 
-        private readonly List<CellRecord> _allRecords = new List<CellRecord>();
         private int _pageIndex;
 
         private string _statusMessage = "填写表单后点「新增」。点表格一行可回填，改完可点「保存选中」。";
@@ -120,7 +120,7 @@ namespace WpfApp2
 
         public bool CanGoNext
         {
-            get { return _pageIndex < GetTotalPages() - 1 && _allRecords.Count > 0; }
+            get { return _pageIndex < GetTotalPages() - 1; }
         }
 
         public MainViewModel()
@@ -156,9 +156,15 @@ namespace WpfApp2
         /// </summary>
         public void ReapplySpec()
         {
-            foreach (var record in _allRecords)
+            var all = Db.Client.Queryable<CellRecord>().ToList();
+            foreach (var record in all)
             {
                 record.RecalcResult();
+            }
+
+            if (all.Count > 0)
+            {
+                Db.Client.Updateable(all).ExecuteCommand();
             }
 
             RefreshPage();
@@ -173,11 +179,22 @@ namespace WpfApp2
             }
 
             record.Time = DateTime.Now;
-            _allRecords.Insert(0, record);
+            try
+            {
+                Db.Client.Insertable(record).ExecuteCommand();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("新增失败 " + record.Barcode, ex);
+                StatusMessage = "新增失败，详见日志。";
+                return;
+            }
+
             _pageIndex = 0;
             ClearDraft();
             RefreshPage();
             StatusMessage = "已新增 " + record.Barcode + "。";
+            AppLog.Info("新增 " + record.Barcode);
         }
 
         public void SaveSelected()
@@ -197,8 +214,20 @@ namespace WpfApp2
             SelectedRecord.Barcode = draft.Barcode;
             SelectedRecord.Voltage = draft.Voltage;
             SelectedRecord.Result = draft.Result;
+            try
+            {
+                Db.Client.Updateable(SelectedRecord).ExecuteCommand();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("保存失败 " + draft.Barcode, ex);
+                StatusMessage = "保存失败，详见日志。";
+                return;
+            }
+
             RefreshPage();
             StatusMessage = "已保存 " + draft.Barcode + "。";
+            AppLog.Info("保存 " + draft.Barcode);
         }
 
         public void ClearDraft()
@@ -217,10 +246,21 @@ namespace WpfApp2
                 return;
             }
 
-            _allRecords.Remove(selected);
+            try
+            {
+                Db.Client.Deleteable(selected).ExecuteCommand();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("删除失败 " + selected.Barcode, ex);
+                StatusMessage = "删除失败，详见日志。";
+                return;
+            }
+
             ClearDraft();
             RefreshPage();
             StatusMessage = "已删除 " + selected.Barcode + "。";
+            AppLog.Info("删除 " + selected.Barcode);
         }
 
         public void GoToPrevPage()
@@ -281,22 +321,23 @@ namespace WpfApp2
             }
 
             var keep = SelectedRecord;
-            var page = _allRecords
+            var page = Db.Client.Queryable<CellRecord>()
+                .OrderBy(x => x.Id, OrderByType.Desc)
                 .Skip(_pageIndex * PageSize)
                 .Take(PageSize)
                 .ToList();
 
             PagedRecords = page;
-            if (keep != null && page.Contains(keep))
+            if (keep != null)
             {
-                SelectedRecord = keep;
+                SelectedRecord = page.FirstOrDefault(x => x.Id == keep.Id);
             }
 
             PageMessage = string.Format(
                 "第 {0} / {1} 页（共 {2} 条）",
-                _allRecords.Count == 0 ? 0 : _pageIndex + 1,
-                _allRecords.Count == 0 ? 0 : totalPages,
-                _allRecords.Count);
+                _pageIndex + 1,
+                totalPages,
+                GetTotalCount());
 
             OnPropertyChanged(nameof(CanGoPrev));
             OnPropertyChanged(nameof(CanGoNext));
@@ -306,17 +347,25 @@ namespace WpfApp2
 
         private int GetTotalPages()
         {
-            if (_allRecords.Count == 0)
-            {
-                return 1;
-            }
+            var count = Db.Client.Queryable<CellRecord>().Count();
+            if (count == 0) return 1;
+            return (int)Math.Ceiling(count / (double)PageSize);
+        }
 
-            return (int)Math.Ceiling(_allRecords.Count / (double)PageSize);
+        private int GetTotalCount()
+        {
+            return Db.Client.Queryable<CellRecord>().Count();
         }
 
         private void SeedDemoData()
         {
+            if (GetTotalCount() != 0)
+            {
+                return;
+            }
+
             var random = new Random(1);
+            var records = new List<CellRecord>();
             for (int i = 1; i <= 23; i++)
             {
                 double voltage = 3.50 + random.NextDouble() * 0.40;
@@ -327,8 +376,10 @@ namespace WpfApp2
                     Time = DateTime.Now.AddMinutes(-i)
                 };
                 record.RecalcResult();
-                _allRecords.Add(record);
+                records.Add(record);
             }
+
+            Db.Client.Insertable(records).ExecuteCommand();
         }
     }
 }

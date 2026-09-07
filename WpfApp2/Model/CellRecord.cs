@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SqlSugar;
+using System;
 using WpfApp2.Services;
 
 namespace WpfApp2.Model
@@ -9,6 +10,9 @@ namespace WpfApp2.Model
     /// </summary>
     public class CellRecord
     {
+        [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
+        public int Id { get; set; }
+
         public string Barcode { get; set; }
         public double Voltage { get; set; }
         public string Result { get; set; }
