@@ -155,30 +155,19 @@ namespace WpfApp2.Services
             lock (_gate)
             {
                 LastError = null;
-                if (!IsOpen)
+                CFrameout frame;
+                if (!TakeFrame(timeoutMs, true, out frame))
                 {
-                    return Fail("尚未 Open。");
-                }
-
-                if (!IsGrabbing)
-                {
-                    return Fail("尚未 StartGrabbing。");
-                }
-
-                if (string.IsNullOrWhiteSpace(bmpPath))
-                {
-                    return Fail("bmpPath 为空。");
-                }
-
-                CFrameout frame = new CFrameout();
-                int nRet = _device.GetImageBuffer(ref frame, timeoutMs);
-                if (nRet != CErrorDefine.MV_OK)
-                {
-                    return Fail("GetImageBuffer 超时或失败 " + HikSdk.FormatError(nRet));
+                    return false;
                 }
 
                 try
                 {
+                    if (string.IsNullOrWhiteSpace(bmpPath))
+                    {
+                        return Fail("bmpPath 为空。");
+                    }
+
                     string dir = Path.GetDirectoryName(bmpPath);
                     if (!string.IsNullOrEmpty(dir))
                     {
@@ -190,7 +179,7 @@ namespace WpfApp2.Services
                     save.ImageType = MV_SAVE_IAMGE_TYPE.MV_IMAGE_BMP;
                     save.MethodValue = 2;
                     save.ImagePath = bmpPath;
-                    nRet = _device.SaveImageToFile(ref save);
+                    int nRet = _device.SaveImageToFile(ref save);
                     if (nRet != CErrorDefine.MV_OK)
                     {
                         return Fail("SaveImageToFile 失败 " + HikSdk.FormatError(nRet));
@@ -201,8 +190,33 @@ namespace WpfApp2.Services
                 }
                 finally
                 {
-                    // 与 GetImageBuffer 成对，不释放内部缓存会逐渐耗尽。
                     _device.FreeImageBuffer(ref frame);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 取一帧并转成 BGR24 拷贝。给 WPF Image 用。超时不算异常，预览循环会一直重试。
+        /// </summary>
+        public bool TryGrabFrame(out CameraFrame frame, int timeoutMs = 400)
+        {
+            frame = null;
+            lock (_gate)
+            {
+                LastError = null;
+                CFrameout raw;
+                if (!TakeFrame(timeoutMs, false, out raw))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    return CopyToBgr24(raw.Image, out frame);
+                }
+                finally
+                {
+                    _device.FreeImageBuffer(ref raw);
                 }
             }
         }
@@ -248,10 +262,78 @@ namespace WpfApp2.Services
             Serial = null;
         }
 
+        private bool TakeFrame(int timeoutMs, bool logFail, out CFrameout frame)
+        {
+            frame = new CFrameout();
+            if (!IsOpen)
+            {
+                return Fail("尚未 Open。", logFail);
+            }
+
+            if (!IsGrabbing)
+            {
+                return Fail("尚未 StartGrabbing。", logFail);
+            }
+
+            int nRet = _device.GetImageBuffer(ref frame, timeoutMs);
+            if (nRet != CErrorDefine.MV_OK)
+            {
+                return Fail("GetImageBuffer 超时或失败 " + HikSdk.FormatError(nRet), logFail);
+            }
+
+            return true;
+        }
+
+        private bool CopyToBgr24(CImage image, out CameraFrame frame)
+        {
+            frame = null;
+            if (image == null)
+            {
+                return Fail("空图像。", false);
+            }
+
+            CPixelConvertParam convert = new CPixelConvertParam();
+            convert.InImage = image;
+            convert.OutImage.PixelType = MvGvspPixelType.PixelType_Gvsp_BGR8_Packed;
+            int nRet = _device.ConvertPixelType(ref convert);
+            if (nRet != CErrorDefine.MV_OK)
+            {
+                return Fail("ConvertPixelType 失败 " + HikSdk.FormatError(nRet), false);
+            }
+
+            byte[] data = convert.OutImage.ImageData;
+            int width = (int)convert.OutImage.Width;
+            int height = (int)convert.OutImage.Height;
+            int need = width * height * 3;
+            if (data == null || width <= 0 || height <= 0 || data.Length < need)
+            {
+                return Fail("转换后的像素长度不够。", false);
+            }
+
+            var copy = new byte[need];
+            Buffer.BlockCopy(data, 0, copy, 0, need);
+            frame = new CameraFrame
+            {
+                Width = width,
+                Height = height,
+                Bgr24 = copy
+            };
+            return true;
+        }
+
         private bool Fail(string message)
         {
+            return Fail(message, true);
+        }
+
+        private bool Fail(string message, bool log)
+        {
             LastError = message;
-            AppLog.Warn(message);
+            if (log)
+            {
+                AppLog.Warn(message);
+            }
+
             return false;
         }
     }

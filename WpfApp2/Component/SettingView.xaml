@@ -93,6 +93,14 @@
                 <Button Content="打开工位并采集"
                         Padding="16,6"
                         Click="OpenStations_Click"/>
+                <Button Content="开始预览"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="StartPreview_Click"/>
+                <Button Content="停止预览"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="StopPreview_Click"/>
                 <Button Content="拍一张外观"
                         Padding="16,6"
                         Margin="8,0,0,0"
@@ -107,11 +115,20 @@
                         Click="CloseStations_Click"/>
             </StackPanel>
 
-            <Image x:Name="PreviewImage"
-                   Height="180"
-                   Margin="0,16,0,8"
-                   Stretch="Uniform"
-                   HorizontalAlignment="Left"/>
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,8">
+                <StackPanel>
+                    <TextBlock Text="外观"/>
+                    <Border Width="320" Height="200" Background="#11000000" Margin="0,4,16,0">
+                        <Image x:Name="AppearancePreview" Stretch="Uniform"/>
+                    </Border>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="码面"/>
+                    <Border Width="320" Height="200" Background="#11000000" Margin="0,4,0,0">
+                        <Image x:Name="CodePreview" Stretch="Uniform"/>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

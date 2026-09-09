@@ -116,6 +116,7 @@
     <Compile Include="Services\CameraInfo.cs" />
     <Compile Include="Services\HikSdk.cs" />
     <Compile Include="Services\CameraService.cs" />
+    <Compile Include="Services\CameraFrame.cs" />
     <Compile Include="Services\CameraHub.cs" />
     <Compile Include="Database\Db.cs" />
     <Page Include="Component\SettingView.xaml">

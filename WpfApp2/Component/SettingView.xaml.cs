@@ -1,8 +1,10 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using WpfApp2.Services;
 
@@ -13,6 +15,8 @@ namespace WpfApp2.Component
     /// </summary>
     public partial class SettingView : UserControl
     {
+        private CancellationTokenSource _previewCts;
+
         private MainViewModel Vm
         {
             get { return DataContext as MainViewModel; }
@@ -21,6 +25,8 @@ namespace WpfApp2.Component
         public SettingView()
         {
             InitializeComponent();
+            Loaded += SettingView_Loaded;
+            Unloaded += SettingView_Unloaded;
             if (SpecStore.Spec != null)
             {
                 MinVoltage.Text = SpecStore.Spec.VoltMin.ToString();
@@ -28,6 +34,19 @@ namespace WpfApp2.Component
                 AppearanceSerialBox.Text = SpecStore.Spec.AppearanceCameraSerial ?? "";
                 CodeSerialBox.Text = SpecStore.Spec.CodeCameraSerial ?? "";
             }
+        }
+
+        private void SettingView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (CameraHub.Get(CameraHub.Appearance) != null || CameraHub.Get(CameraHub.Code) != null)
+            {
+                StartPreview();
+            }
+        }
+
+        private void SettingView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            StopPreview();
         }
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -67,17 +86,15 @@ namespace WpfApp2.Component
 
         private void FillAppearance_Click(object sender, RoutedEventArgs e)
         {
-            CameraInfo info = DeviceList.SelectedItem as CameraInfo;
-            if (info == null || string.IsNullOrEmpty(info.Serial))
-            {
-                SetStatus("请先刷新并选中一台。");
-                return;
-            }
-
-            AppearanceSerialBox.Text = info.Serial;
+            FillSerial(AppearanceSerialBox);
         }
 
         private void FillCode_Click(object sender, RoutedEventArgs e)
+        {
+            FillSerial(CodeSerialBox);
+        }
+
+        private void FillSerial(TextBox box)
         {
             CameraInfo info = DeviceList.SelectedItem as CameraInfo;
             if (info == null || string.IsNullOrEmpty(info.Serial))
@@ -86,14 +103,40 @@ namespace WpfApp2.Component
                 return;
             }
 
-            CodeSerialBox.Text = info.Serial;
+            box.Text = info.Serial;
         }
 
         private void OpenStations_Click(object sender, RoutedEventArgs e)
         {
             ApplyCameraSerialsToSpec();
+            StopPreview();
             bool ok = CameraHub.OpenStations();
-            SetStatus(ok ? "工位已打开并开始采集。" : (CameraHub.LastError ?? "打开失败。"));
+            if (!ok)
+            {
+                SetStatus(CameraHub.LastError ?? "打开失败。");
+                return;
+            }
+
+            StartPreview();
+            SetStatus("工位已打开，正在预览。");
+        }
+
+        private void StartPreview_Click(object sender, RoutedEventArgs e)
+        {
+            if (CameraHub.Get(CameraHub.Appearance) == null && CameraHub.Get(CameraHub.Code) == null)
+            {
+                SetStatus("请先打开工位。");
+                return;
+            }
+
+            StartPreview();
+            SetStatus("预览已开始。");
+        }
+
+        private void StopPreview_Click(object sender, RoutedEventArgs e)
+        {
+            StopPreview();
+            SetStatus("预览已停止。");
         }
 
         private async void GrabAppearance_Click(object sender, RoutedEventArgs e)
@@ -108,6 +151,7 @@ namespace WpfApp2.Component
 
         private void CloseStations_Click(object sender, RoutedEventArgs e)
         {
+            StopPreview();
             CameraHub.CloseAll();
             SetStatus("已关闭全部相机。");
         }
@@ -129,8 +173,68 @@ namespace WpfApp2.Component
                 return;
             }
 
-            ShowPreview(path);
             SetStatus("已保存 " + path);
+        }
+
+        private void StartPreview()
+        {
+            StopPreview();
+            _previewCts = new CancellationTokenSource();
+            CancellationToken token = _previewCts.Token;
+            Task.Run(() => PreviewLoop(CameraHub.Appearance, AppearancePreview, token));
+            Task.Run(() => PreviewLoop(CameraHub.Code, CodePreview, token));
+        }
+
+        private void StopPreview()
+        {
+            if (_previewCts == null)
+            {
+                return;
+            }
+
+            _previewCts.Cancel();
+            _previewCts.Dispose();
+            _previewCts = null;
+        }
+
+        private void PreviewLoop(string station, Image target, CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                CameraService camera = CameraHub.Get(station);
+                if (camera == null)
+                {
+                    Thread.Sleep(200);
+                    continue;
+                }
+
+                CameraFrame frame;
+                if (!camera.TryGrabFrame(out frame, 400))
+                {
+                    continue;
+                }
+
+                // BeginInvoke：不要 Invoke，否则关预览时会和 UI 线程互相等。
+                target.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        target.Source = ToBitmap(frame);
+                    }
+                }));
+            }
+        }
+
+        private static BitmapSource ToBitmap(CameraFrame frame)
+        {
+            var bitmap = new WriteableBitmap(frame.Width, frame.Height, 96, 96, PixelFormats.Bgr24, null);
+            bitmap.WritePixels(
+                new Int32Rect(0, 0, frame.Width, frame.Height),
+                frame.Bgr24,
+                frame.Width * 3,
+                0);
+            bitmap.Freeze();
+            return bitmap;
         }
 
         private void ApplyCameraSerialsToSpec()
@@ -142,17 +246,6 @@ namespace WpfApp2.Component
 
             SpecStore.Spec.AppearanceCameraSerial = (AppearanceSerialBox.Text ?? "").Trim();
             SpecStore.Spec.CodeCameraSerial = (CodeSerialBox.Text ?? "").Trim();
-        }
-
-        private void ShowPreview(string path)
-        {
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.UriSource = new Uri(path);
-            image.EndInit();
-            image.Freeze();
-            PreviewImage.Source = image;
         }
 
         private void SetStatus(string text)
