@@ -19,6 +19,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -29,6 +30,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -39,6 +41,10 @@
   <ItemGroup>
     <Reference Include="halcondotnetxl">
       <HintPath>..\..\..\..\..\..\Program Files\MVTec\HALCON-17.12-Progress\bin\dotnet35\halcondotnetxl.dll</HintPath>
+    </Reference>
+    <Reference Include="MvCamCtrl.Net">
+      <HintPath>C:\Program Files (x86)\MVS\Development\DotNet\AnyCpu\MvCamCtrl.Net.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="log4net, Version=2.0.17.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
       <HintPath>..\packages\log4net.2.0.17\lib\net45\log4net.dll</HintPath>
@@ -107,6 +113,10 @@
     <Compile Include="Model\VoltageSpec.cs" />
     <Compile Include="Services\SpecStore.cs" />
     <Compile Include="Services\AppLog.cs" />
+    <Compile Include="Services\CameraInfo.cs" />
+    <Compile Include="Services\HikSdk.cs" />
+    <Compile Include="Services\CameraService.cs" />
+    <Compile Include="Services\CameraHub.cs" />
     <Compile Include="Database\Db.cs" />
     <Page Include="Component\SettingView.xaml">
       <SubType>Designer</SubType>

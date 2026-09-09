@@ -19,7 +19,14 @@ namespace WpfApp2
             AppLog.Info("加载配置");
             SpecStore.Load();
             Db.Init();
-            
+            CameraHub.Init();
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            CameraHub.Shutdown();
+            AppLog.Info("程序退出");
+            base.OnExit(e);
         }
 
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

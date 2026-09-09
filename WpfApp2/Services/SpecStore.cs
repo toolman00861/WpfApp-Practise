@@ -53,7 +53,8 @@ namespace WpfApp2.Services
 
             var options = new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             };
 
             File.WriteAllText(path, JsonSerializer.Serialize(Spec, options));

@@ -7,56 +7,111 @@
              mc:Ignorable="d"
              d:DesignHeight="450"
              d:DesignWidth="800">
-    <!--
-        WPF 默认没有 CSS 的 gap：Grid 行、StackPanel 子项都会贴在一起。
-        用 Margin 留空，用 VerticalAlignment 让文字和输入框齐平。
-    -->
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+            <TextBlock Text="阈值设置"
+                       FontSize="24"
+                       FontWeight="SemiBold"/>
 
-        <TextBlock Grid.Row="0"
-                   Text="阈值设置"
-                   FontSize="24"
-                   FontWeight="SemiBold"/>
+            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                <TextBlock Text="电压最小值"
+                           Width="80"
+                           VerticalAlignment="Center"/>
+                <TextBox x:Name="MinVoltage"
+                         Width="100"
+                         Margin="12,0,0,0"
+                         Padding="4"
+                         VerticalContentAlignment="Center"/>
+            </StackPanel>
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="0,20,0,0">
-            <TextBlock Text="电压最小值"
-                       Width="80"
-                       VerticalAlignment="Center"/>
-            <TextBox 
-                x:Name="MinVoltage"
-                Width="100"
-                     Margin="12,0,0,0"
-                     Padding="4"
-                     VerticalContentAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <TextBlock Text="电压最大值"
+                           Width="80"
+                           VerticalAlignment="Center"/>
+                <TextBox x:Name="MaxVoltage"
+                         Width="100"
+                         Margin="12,0,0,0"
+                         Padding="4"
+                         VerticalContentAlignment="Center"/>
+            </StackPanel>
+
+            <Button HorizontalAlignment="Left"
+                    Margin="0,20,0,0"
+                    Padding="16,6"
+                    Content="保存阈值和相机序列号"
+                    Click="SaveButton_Click"/>
+
+            <TextBlock Text="相机练习"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       Margin="0,28,0,0"/>
+            <TextBlock Margin="0,6,0,0"
+                       Foreground="Gray"
+                       TextWrapping="Wrap"
+                       Text="刷新设备会枚举 SDK 看见的相机（含虚拟机）。把序列号填到工位，再打开、拍一张。图存在 exe 旁 Captures 目录。"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button Content="刷新设备"
+                        Padding="16,6"
+                        Click="RefreshDevices_Click"/>
+                <Button Content="选中填到外观"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="FillAppearance_Click"/>
+                <Button Content="选中填到码面"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="FillCode_Click"/>
+            </StackPanel>
+
+            <ListBox x:Name="DeviceList"
+                     Height="90"
+                     Margin="0,8,0,0"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <TextBlock Text="外观序列号"
+                           Width="80"
+                           VerticalAlignment="Center"/>
+                <TextBox x:Name="AppearanceSerialBox"
+                         Width="220"
+                         Margin="12,0,0,0"
+                         Padding="4"
+                         VerticalContentAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="码面序列号"
+                           Width="80"
+                           VerticalAlignment="Center"/>
+                <TextBox x:Name="CodeSerialBox"
+                         Width="220"
+                         Margin="12,0,0,0"
+                         Padding="4"
+                         VerticalContentAlignment="Center"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button Content="打开工位并采集"
+                        Padding="16,6"
+                        Click="OpenStations_Click"/>
+                <Button Content="拍一张外观"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="GrabAppearance_Click"/>
+                <Button Content="拍一张码面"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="GrabCode_Click"/>
+                <Button Content="关闭全部"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="CloseStations_Click"/>
+            </StackPanel>
+
+            <Image x:Name="PreviewImage"
+                   Height="180"
+                   Margin="0,16,0,8"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Left"/>
         </StackPanel>
-
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    Margin="0,12,0,0">
-            <TextBlock 
-                    Text="电压最大值"
-                    Width="80"
-                    VerticalAlignment="Center"/>
-            <TextBox 
-                x:Name="MaxVoltage"
-                Width="100"
-                     Margin="12,0,0,0"
-                     Padding="4"
-                     VerticalContentAlignment="Center"/>
-        </StackPanel>
-        <Button Grid.Row="3"
-                HorizontalAlignment="Left"
-                Margin="0,20,0,0"
-                Padding="16,6"
-                Content="保存"
-                Click="SaveButton_Click"/>
-    </Grid>
+    </ScrollViewer>
 </UserControl>
