@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using SqlSugar;
 using WpfApp2.Database;
@@ -19,6 +20,8 @@ namespace WpfApp2
         private const int PageSize = 8;
 
         private int _pageIndex;
+        private int _totalCount;
+        private bool _busy;
 
         private string _statusMessage = "填写表单后点「新增」。点表格一行可回填，改完可点「保存选中」。";
         private string _pageMessage;
@@ -40,7 +43,6 @@ namespace WpfApp2
         public ICommand PrevCommand { get; }
         public ICommand NextCommand { get; }
         public ICommand SaveSpecCommand { get; }
-
 
         public string StatusMessage
         {
@@ -94,7 +96,7 @@ namespace WpfApp2
                     DraftBarcode = value.Barcode;
                     DraftVoltage = value.Voltage.ToString("F3");
                 }
-                // 如果更新
+
                 if (SaveCommand is RelayCommand saveCommand)
                 {
                     saveCommand.RaiseCanExecuteChanged();
@@ -103,7 +105,6 @@ namespace WpfApp2
                 {
                     deleteCommand.RaiseCanExecuteChanged();
                 }
-
             }
         }
 
@@ -115,62 +116,80 @@ namespace WpfApp2
 
         public bool CanGoPrev
         {
-            get { return _pageIndex > 0; }
+            get { return !_busy && _pageIndex > 0; }
         }
 
         public bool CanGoNext
         {
-            get { return _pageIndex < GetTotalPages() - 1; }
+            get { return !_busy && _pageIndex < GetTotalPages() - 1; }
         }
 
         public MainViewModel()
         {
-            AddCommand = new RelayCommand(AddFromDraft, CanAddFromDraft);
-            SaveCommand = new RelayCommand(SaveSelected, CanSaveSelected);
-            ClearCommand = new RelayCommand(ClearDraft);
-            DeleteCommand = new RelayCommand(DeleteSelected, CanSaveSelected);
-            PrevCommand = new RelayCommand(GoToPrevPage, ()=> CanGoPrev);
-            NextCommand = new RelayCommand(GoToNextPage, () => CanGoNext);
+            AddCommand = new RelayCommand(AddFromDraftAsync, CanAddFromDraft);
+            SaveCommand = new RelayCommand(SaveSelectedAsync, CanSaveSelected);
+            ClearCommand = new RelayCommand(ClearDraft, CanClearDraft);
+            DeleteCommand = new RelayCommand(DeleteSelectedAsync, CanSaveSelected);
+            PrevCommand = new RelayCommand(GoToPrevPageAsync, () => CanGoPrev);
+            NextCommand = new RelayCommand(GoToNextPageAsync, () => CanGoNext);
             SeedDemoData();
-            RefreshPage();
             SpecStore.Changed += OnSpecChanged;
+            // 构造函数不能 await；第一次查库仍同步。按钮触发的读写才走 async。
+            RefreshPage();
+        }
+
+        private bool CanClearDraft()
+        {
+            return !_busy;
         }
 
         private bool CanSaveSelected()
         {
-            return _selectedRecord != null;
+            return !_busy && _selectedRecord != null;
         }
 
         private bool CanAddFromDraft()
         {
-            return !string.IsNullOrWhiteSpace(DraftBarcode);
+            return !_busy && !string.IsNullOrWhiteSpace(DraftBarcode);
         }
 
-        private void OnSpecChanged(object sender, EventArgs e)
+        private async void OnSpecChanged(object sender, EventArgs e)
         {
-            ReapplySpec();
+            await ReapplySpecAsync();
         }
 
         /// <summary>
         /// 阈值变了：每条记录的 Result 重新判定，再换一份 PagedRecords 让表格重绑。
         /// </summary>
-        public void ReapplySpec()
+        public async Task ReapplySpecAsync()
         {
-            var all = Db.Client.Queryable<CellRecord>().ToList();
-            foreach (var record in all)
+            if (!BeginBusy())
             {
-                record.RecalcResult();
+                return;
             }
 
-            if (all.Count > 0)
+            try
             {
-                Db.Client.Updateable(all).ExecuteCommand();
-            }
+                var all = await Db.Client.Queryable<CellRecord>().ToListAsync();
+                foreach (var record in all)
+                {
+                    record.RecalcResult();
+                }
 
-            RefreshPage();
+                if (all.Count > 0)
+                {
+                    await Db.Client.Updateable(all).ExecuteCommandAsync();
+                }
+
+                await RefreshPageAsync();
+            }
+            finally
+            {
+                EndBusy();
+            }
         }
 
-        public void AddFromDraft()
+        public async Task AddFromDraftAsync()
         {
             CellRecord record;
             if (!TryReadDraft(out record))
@@ -178,26 +197,33 @@ namespace WpfApp2
                 return;
             }
 
+            if (!BeginBusy())
+            {
+                return;
+            }
+
             record.Time = DateTime.Now;
             try
             {
-                Db.Client.Insertable(record).ExecuteCommand();
+                await Db.Client.Insertable(record).ExecuteCommandAsync();
+                _pageIndex = 0;
+                ClearDraftCore();
+                await RefreshPageAsync();
+                StatusMessage = "已新增 " + record.Barcode + "。";
+                AppLog.Info("新增 " + record.Barcode);
             }
             catch (Exception ex)
             {
                 AppLog.Error("新增失败 " + record.Barcode, ex);
                 StatusMessage = "新增失败，详见日志。";
-                return;
             }
-
-            _pageIndex = 0;
-            ClearDraft();
-            RefreshPage();
-            StatusMessage = "已新增 " + record.Barcode + "。";
-            AppLog.Info("新增 " + record.Barcode);
+            finally
+            {
+                EndBusy();
+            }
         }
 
-        public void SaveSelected()
+        public async Task SaveSelectedAsync()
         {
             if (SelectedRecord == null)
             {
@@ -211,33 +237,39 @@ namespace WpfApp2
                 return;
             }
 
+            if (!BeginBusy())
+            {
+                return;
+            }
+
             SelectedRecord.Barcode = draft.Barcode;
             SelectedRecord.Voltage = draft.Voltage;
             SelectedRecord.Result = draft.Result;
             try
             {
-                Db.Client.Updateable(SelectedRecord).ExecuteCommand();
+                await Db.Client.Updateable(SelectedRecord).ExecuteCommandAsync();
+                await RefreshPageAsync();
+                StatusMessage = "已保存 " + draft.Barcode + "。";
+                AppLog.Info("保存 " + draft.Barcode);
             }
             catch (Exception ex)
             {
                 AppLog.Error("保存失败 " + draft.Barcode, ex);
                 StatusMessage = "保存失败，详见日志。";
-                return;
             }
-
-            RefreshPage();
-            StatusMessage = "已保存 " + draft.Barcode + "。";
-            AppLog.Info("保存 " + draft.Barcode);
+            finally
+            {
+                EndBusy();
+            }
         }
 
         public void ClearDraft()
         {
-            SelectedRecord = null;
-            DraftBarcode = "";
-            DraftVoltage = "";
+            ClearDraftCore();
+            StatusMessage = "表单已清空。";
         }
 
-        public void DeleteSelected()
+        public async Task DeleteSelectedAsync()
         {
             var selected = SelectedRecord;
             if (selected == null)
@@ -246,38 +278,73 @@ namespace WpfApp2
                 return;
             }
 
+            if (!BeginBusy())
+            {
+                return;
+            }
+
             try
             {
-                Db.Client.Deleteable(selected).ExecuteCommand();
+                await Db.Client.Deleteable(selected).ExecuteCommandAsync();
+                ClearDraftCore();
+                await RefreshPageAsync();
+                StatusMessage = "已删除 " + selected.Barcode + "。";
+                AppLog.Info("删除 " + selected.Barcode);
             }
             catch (Exception ex)
             {
                 AppLog.Error("删除失败 " + selected.Barcode, ex);
                 StatusMessage = "删除失败，详见日志。";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        public async Task GoToPrevPageAsync()
+        {
+            if (_pageIndex <= 0)
+            {
                 return;
             }
 
-            ClearDraft();
-            RefreshPage();
-            StatusMessage = "已删除 " + selected.Barcode + "。";
-            AppLog.Info("删除 " + selected.Barcode);
-        }
+            if (!BeginBusy())
+            {
+                return;
+            }
 
-        public void GoToPrevPage()
-        {
-            if (_pageIndex > 0)
+            try
             {
                 _pageIndex--;
-                RefreshPage();
+                await RefreshPageAsync();
+            }
+            finally
+            {
+                EndBusy();
             }
         }
 
-        public void GoToNextPage()
+        public async Task GoToNextPageAsync()
         {
-            if (_pageIndex < GetTotalPages() - 1)
+            if (_pageIndex >= GetTotalPages() - 1)
+            {
+                return;
+            }
+
+            if (!BeginBusy())
+            {
+                return;
+            }
+
+            try
             {
                 _pageIndex++;
-                RefreshPage();
+                await RefreshPageAsync();
+            }
+            finally
+            {
+                EndBusy();
             }
         }
 
@@ -308,7 +375,31 @@ namespace WpfApp2
             return true;
         }
 
+        /// <summary>
+        /// 启动时用：构造函数不能 await。
+        /// </summary>
         private void RefreshPage()
+        {
+            _totalCount = Db.Client.Queryable<CellRecord>().Count();
+            ApplyPage(Db.Client.Queryable<CellRecord>()
+                .OrderBy(x => x.Id, OrderByType.Desc)
+                .Skip(_pageIndex * PageSize)
+                .Take(PageSize)
+                .ToList());
+        }
+
+        private async Task RefreshPageAsync()
+        {
+            _totalCount = await Db.Client.Queryable<CellRecord>().CountAsync();
+            var page = await Db.Client.Queryable<CellRecord>()
+                .OrderBy(x => x.Id, OrderByType.Desc)
+                .Skip(_pageIndex * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+            ApplyPage(page);
+        }
+
+        private void ApplyPage(List<CellRecord> page)
         {
             int totalPages = GetTotalPages();
             if (_pageIndex >= totalPages)
@@ -321,12 +412,6 @@ namespace WpfApp2
             }
 
             var keep = SelectedRecord;
-            var page = Db.Client.Queryable<CellRecord>()
-                .OrderBy(x => x.Id, OrderByType.Desc)
-                .Skip(_pageIndex * PageSize)
-                .Take(PageSize)
-                .ToList();
-
             PagedRecords = page;
             if (keep != null)
             {
@@ -335,31 +420,70 @@ namespace WpfApp2
 
             PageMessage = string.Format(
                 "第 {0} / {1} 页（共 {2} 条）",
-                _pageIndex + 1,
-                totalPages,
-                GetTotalCount());
+                _totalCount == 0 ? 0 : _pageIndex + 1,
+                _totalCount == 0 ? 0 : totalPages,
+                _totalCount);
 
             OnPropertyChanged(nameof(CanGoPrev));
             OnPropertyChanged(nameof(CanGoNext));
-            (PrevCommand as RelayCommand)?.RaiseCanExecuteChanged();
-            (NextCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            RaisePagingCommands();
         }
 
         private int GetTotalPages()
         {
-            var count = Db.Client.Queryable<CellRecord>().Count();
-            if (count == 0) return 1;
-            return (int)Math.Ceiling(count / (double)PageSize);
+            if (_totalCount == 0)
+            {
+                return 1;
+            }
+
+            return (int)Math.Ceiling(_totalCount / (double)PageSize);
         }
 
-        private int GetTotalCount()
+        private void ClearDraftCore()
         {
-            return Db.Client.Queryable<CellRecord>().Count();
+            SelectedRecord = null;
+            DraftBarcode = "";
+            DraftVoltage = "";
+        }
+
+        private bool BeginBusy()
+        {
+            if (_busy)
+            {
+                return false;
+            }
+
+            _busy = true;
+            RaiseAllCommands();
+            return true;
+        }
+
+        private void EndBusy()
+        {
+            _busy = false;
+            RaiseAllCommands();
+        }
+
+        private void RaiseAllCommands()
+        {
+            OnPropertyChanged(nameof(CanGoPrev));
+            OnPropertyChanged(nameof(CanGoNext));
+            (AddCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (SaveCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ClearCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (DeleteCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            RaisePagingCommands();
+        }
+
+        private void RaisePagingCommands()
+        {
+            (PrevCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (NextCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private void SeedDemoData()
         {
-            if (GetTotalCount() != 0)
+            if (Db.Client.Queryable<CellRecord>().Count() != 0)
             {
                 return;
             }

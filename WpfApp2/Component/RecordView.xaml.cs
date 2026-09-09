@@ -1,5 +1,4 @@
-﻿using System.Windows;
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 
 namespace WpfApp2.Component
 {
@@ -11,27 +10,6 @@ namespace WpfApp2.Component
         public RecordView()
         {
             InitializeComponent();
-        }
-
-        private MainViewModel Vm
-        {
-            get { return DataContext as MainViewModel; }
-        }
-
-        private void PrevButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (Vm != null)
-            {
-                Vm.GoToPrevPage();
-            }
-        }
-
-        private void NextButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (Vm != null)
-            {
-                Vm.GoToNextPage();
-            }
         }
     }
 }
