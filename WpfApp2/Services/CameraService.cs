@@ -68,6 +68,13 @@ namespace WpfApp2.Services
                     }
                 }
 
+                bool exclusiveOk = CSystem.IsDeviceAccessible(ref selected, MV_ACCESS_MODE.MV_ACCESS_EXCLUSIVE);
+                AppLog.Info("准备打开 " + serial + "  独占可达=" + exclusiveOk);
+                if (!exclusiveOk)
+                {
+                    return Fail("相机 " + serial + " 正被占用。若两个工位填了同一序列号，只留一台；否则在 MVS 里对该设备点「断开」。");
+                }
+
                 nRet = _device.CreateHandle(ref selected);
                 if (nRet != CErrorDefine.MV_OK)
                 {
@@ -77,12 +84,13 @@ namespace WpfApp2.Services
                 _handleCreated = true;
                 _layerType = selected.nTLayerType;
 
+                // 默认独占。USB 虚拟机忽略 AccessMode 参数，被占用时只能断开对方。
                 nRet = _device.OpenDevice();
                 if (nRet != CErrorDefine.MV_OK)
                 {
                     _device.DestroyHandle();
                     _handleCreated = false;
-                    return Fail("OpenDevice 失败 " + HikSdk.FormatError(nRet) + "（是否被 MVS Client 占用？）");
+                    return Fail("OpenDevice 失败 " + HikSdk.FormatError(nRet) + "。相机 " + serial + " 可能被 MVS Client 或其他程序占用。");
                 }
 
                 // GigE 真机才需要调包长；虚拟 USB 跳过。

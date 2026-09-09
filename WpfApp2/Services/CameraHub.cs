@@ -79,22 +79,33 @@ namespace WpfApp2.Services
                 CloseAllCore();
 
                 VoltageSpecSerials serials = ReadSerials();
+                string appearance = (serials.Appearance ?? "").Trim();
+                string code = (serials.Code ?? "").Trim();
+                if (!string.IsNullOrEmpty(appearance)
+                    && !string.IsNullOrEmpty(code)
+                    && string.Equals(appearance, code, StringComparison.OrdinalIgnoreCase))
+                {
+                    LastError = "两个工位填了同一台 " + appearance + "。一台相机只能独占打开一次，请给码面换另一台的 Vir…，或先清空码面只练一台。";
+                    AppLog.Warn(LastError);
+                    return false;
+                }
+
                 int planned = 0;
                 int opened = 0;
 
-                if (!string.IsNullOrWhiteSpace(serials.Appearance))
+                if (!string.IsNullOrEmpty(appearance))
                 {
                     planned++;
-                    if (OpenOne(Appearance, serials.Appearance.Trim()))
+                    if (OpenOne(Appearance, appearance))
                     {
                         opened++;
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(serials.Code))
+                if (!string.IsNullOrEmpty(code))
                 {
                     planned++;
-                    if (OpenOne(Code, serials.Code.Trim()))
+                    if (OpenOne(Code, code))
                     {
                         opened++;
                     }

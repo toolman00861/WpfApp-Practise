@@ -17,7 +17,23 @@ namespace WpfApp2.Services
 
         public static string FormatError(int nRet)
         {
-            return "0x" + nRet.ToString("X8");
+            string hex = "0x" + nRet.ToString("X8");
+            if (nRet == CErrorDefine.MV_E_ACCESS_DENIED)
+            {
+                return hex + " 无访问权限（设备已被独占）";
+            }
+
+            if (nRet == CErrorDefine.MV_E_BUSY)
+            {
+                return hex + " 设备忙";
+            }
+
+            if (nRet == CErrorDefine.MV_E_HANDLE)
+            {
+                return hex + " 句柄无效";
+            }
+
+            return hex;
         }
 
         public static int EnumerateRaw(out List<CCameraInfo> devices)
