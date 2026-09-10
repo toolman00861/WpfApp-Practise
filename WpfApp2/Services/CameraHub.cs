@@ -208,8 +208,8 @@ namespace WpfApp2.Services
             var spec = SpecStore.Spec;
             return new VoltageSpecSerials
             {
-                Appearance = spec == null ? null : spec.AppearanceCameraSerial,
-                Code = spec == null ? null : spec.CodeCameraSerial
+                Appearance = spec?.AppearanceCameraSerial,
+                Code = spec?.CodeCameraSerial
             };
         }
 

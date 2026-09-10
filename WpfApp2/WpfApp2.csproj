@@ -118,6 +118,7 @@
     <Compile Include="Services\CameraService.cs" />
     <Compile Include="Services\CameraFrame.cs" />
     <Compile Include="Services\CameraHub.cs" />
+    <Compile Include="Services\HalconService.cs" />
     <Compile Include="Database\Db.cs" />
     <Page Include="Component\SettingView.xaml">
       <SubType>Designer</SubType>

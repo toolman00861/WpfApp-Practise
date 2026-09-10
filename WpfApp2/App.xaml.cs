@@ -20,6 +20,7 @@ namespace WpfApp2
             SpecStore.Load();
             Db.Init();
             CameraHub.Init();
+            HalconService.Init();
         }
 
         protected override void OnExit(ExitEventArgs e)

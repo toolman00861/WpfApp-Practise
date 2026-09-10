@@ -129,6 +129,56 @@
                     </Border>
                 </StackPanel>
             </StackPanel>
+
+            <TextBlock Text="Halcon 练习"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       Margin="0,12,0,0"/>
+            <TextBlock Margin="0,6,0,0"
+                       Foreground="Gray"
+                       TextWrapping="Wrap"
+                       Text="先打开外观工位。点按钮会新抓一帧，交给 Halcon 处理后显示在下方，不打断左边预览。"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <TextBlock Text="二值化下限"
+                           Width="80"
+                           VerticalAlignment="Center"/>
+                <TextBox x:Name="ThresholdMinBox"
+                         Width="60"
+                         Margin="12,0,0,0"
+                         Padding="4"
+                         VerticalContentAlignment="Center"
+                         Text="0"/>
+                <TextBlock Text="上限"
+                           Width="40"
+                           Margin="16,0,0,0"
+                           VerticalAlignment="Center"/>
+                <TextBox x:Name="ThresholdMaxBox"
+                         Width="60"
+                         Margin="12,0,0,0"
+                         Padding="4"
+                         VerticalContentAlignment="Center"
+                         Text="128"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button Content="外观转灰度"
+                        Padding="16,6"
+                        Click="AppearanceToGray_Click"/>
+                <Button Content="外观测亮度"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="AppearanceMeasure_Click"/>
+                <Button Content="外观二值化"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="AppearanceThreshold_Click"/>
+            </StackPanel>
+
+            <TextBlock Text="处理结果" Margin="0,16,0,0"/>
+            <Border Width="320" Height="200" HorizontalAlignment="Left" Background="#11000000" Margin="0,4,0,8">
+                <Image x:Name="ProcessPreview" Stretch="Uniform"/>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

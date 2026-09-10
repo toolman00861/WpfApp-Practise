@@ -139,6 +139,76 @@ namespace WpfApp2.Component
             SetStatus("预览已停止。");
         }
 
+        private async void AppearanceToGray_Click(object sender, RoutedEventArgs e)
+        {
+            CameraFrame input = await GrabStationFrameAsync(CameraHub.Appearance);
+            if (input == null)
+            {
+                return;
+            }
+
+            CameraFrame output = null;
+            bool ok = await Task.Run(() => HalconService.TryToGray(input, out output));
+            if (!ok)
+            {
+                SetStatus(HalconService.LastError ?? "转灰度失败。");
+                return;
+            }
+
+            ProcessPreview.Source = ToBitmap(output);
+            SetStatus("灰度完成 " + output.Width + "x" + output.Height);
+        }
+
+        private async void AppearanceMeasure_Click(object sender, RoutedEventArgs e)
+        {
+            CameraFrame input = await GrabStationFrameAsync(CameraHub.Appearance);
+            if (input == null)
+            {
+                return;
+            }
+
+            CameraFrame output = null;
+            double mean = 0;
+            double deviation = 0;
+            bool ok = await Task.Run(() => HalconService.TryMeasureGray(input, out output, out mean, out deviation));
+            if (!ok)
+            {
+                SetStatus(HalconService.LastError ?? "测亮度失败。");
+                return;
+            }
+
+            ProcessPreview.Source = ToBitmap(output);
+            SetStatus("均值 " + mean.ToString("0.0") + "，标准差 " + deviation.ToString("0.0") + "（大约 0～255）");
+        }
+
+        private async void AppearanceThreshold_Click(object sender, RoutedEventArgs e)
+        {
+            int minGray;
+            int maxGray;
+            if (!int.TryParse(ThresholdMinBox.Text, out minGray) || !int.TryParse(ThresholdMaxBox.Text, out maxGray))
+            {
+                SetStatus("阈值请填 0～255 的整数。");
+                return;
+            }
+
+            CameraFrame input = await GrabStationFrameAsync(CameraHub.Appearance);
+            if (input == null)
+            {
+                return;
+            }
+
+            CameraFrame output = null;
+            bool ok = await Task.Run(() => HalconService.TryThreshold(input, minGray, maxGray, out output));
+            if (!ok)
+            {
+                SetStatus(HalconService.LastError ?? "二值化失败。");
+                return;
+            }
+
+            ProcessPreview.Source = ToBitmap(output);
+            SetStatus("二值化完成，区间 [" + minGray + ", " + maxGray + "]");
+        }
+
         private async void GrabAppearance_Click(object sender, RoutedEventArgs e)
         {
             await GrabAsync(CameraHub.Appearance);
@@ -154,6 +224,26 @@ namespace WpfApp2.Component
             StopPreview();
             CameraHub.CloseAll();
             SetStatus("已关闭全部相机。");
+        }
+
+        private async Task<CameraFrame> GrabStationFrameAsync(string station)
+        {
+            CameraService camera = CameraHub.Get(station);
+            if (camera == null)
+            {
+                SetStatus("工位「" + station + "」未打开。先打开工位再处理。");
+                return null;
+            }
+
+            CameraFrame frame = null;
+            bool ok = await Task.Run(() => camera.TryGrabFrame(out frame, 1000));
+            if (!ok || frame == null)
+            {
+                SetStatus(camera.LastError ?? "取图失败。");
+                return null;
+            }
+
+            return frame;
         }
 
         private async Task GrabAsync(string station)
