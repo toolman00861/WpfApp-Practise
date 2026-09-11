@@ -19,12 +19,14 @@ namespace WpfApp2
             AppLog.Info("加载配置");
             SpecStore.Load();
             Db.Init();
+            // 海康链路入口：只读 SDK 版本，不枚举、不占相机。真正 Open 在设置页点「打开工位」。
             CameraHub.Init();
             HalconService.Init();
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // 对照官方 bnClose：StopGrabbing → CloseDevice → DestroyHandle，避免退出后虚拟相机仍被占用。
             CameraHub.Shutdown();
             AppLog.Info("程序退出");
             base.OnExit(e);

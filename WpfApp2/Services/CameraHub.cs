@@ -1,10 +1,19 @@
 using System;
 using System.Collections.Generic;
+using MvCamCtrl.NET;
 
 namespace WpfApp2.Services
 {
     /// <summary>
-    /// 进程级相机入口：枚举、按工位创建会话、按名取出、退出时统一关。
+    /// 进程级相机入口。官方 BasicDemo 把一台 <c>CCamera</c> 直接放在 Form 里；
+    /// 我们拆成两层：Hub 管「有几台、谁打开」，CameraService 管「这一台的 SDK 会话」。
+    ///
+    /// 对照官方按钮：
+    /// Enumerate     ≈ bnEnum / DeviceListAcq（只搜，不占设备）
+    /// OpenStations  ≈ 连续两次 bnOpen + bnStartGrab（外观、码面各一台）
+    /// Get           ≈ 取出 Form 里那台 m_MyCamera（借用，不要 Dispose）
+    /// CloseAll      ≈ bnClose（StopGrabbing → CloseDevice → DestroyHandle）
+    ///
     /// 静态的是 Hub，会话仍是实例。调用方 Get 到的对象不要 Dispose。
     /// </summary>
     public static class CameraHub
@@ -18,7 +27,10 @@ namespace WpfApp2.Services
 
         public static string LastError { get; private set; }
 
-        /// <summary>只记日志、准备容器，不占设备。</summary>
+        /// <summary>
+        /// 对照 <c>CSystem.GetSDKVersion()</c>。只记日志、准备容器，不 Enum、不 Open。
+        /// 读版本失败通常是没装 MVS，或进程位数和 MvCamCtrl.Net.dll 不一致。
+        /// </summary>
         public static void Init()
         {
             lock (Sync)
@@ -35,7 +47,10 @@ namespace WpfApp2.Services
             }
         }
 
-        /// <summary>列出当前能看见的设备。不 Open，不占用。</summary>
+        /// <summary>
+        /// 对照 BasicDemo.DeviceListAcq：CSystem.EnumDevices → 转成可读摘要。
+        /// 不 Open、不占用。界面「刷新设备」走这里。
+        /// </summary>
         public static IReadOnlyList<CameraInfo> Enumerate()
         {
             lock (Sync)
@@ -43,9 +58,8 @@ namespace WpfApp2.Services
                 LastError = null;
                 try
                 {
-                    List<MvCamCtrl.NET.CCameraInfo> raw;
-                    int nRet = HikSdk.EnumerateRaw(out raw);
-                    if (nRet != MvCamCtrl.NET.CErrorDefine.MV_OK)
+                    int nRet = HikSdk.EnumerateRaw(out List<CCameraInfo> raw);
+                    if (nRet != CErrorDefine.MV_OK)
                     {
                         LastError = "枚举失败 " + HikSdk.FormatError(nRet);
                         AppLog.Warn(LastError);
@@ -70,7 +84,10 @@ namespace WpfApp2.Services
             }
         }
 
-        /// <summary>按 spec.json 里的两个序列号打开工位并开始采集。</summary>
+        /// <summary>
+        /// 按 spec.json 里的两个序列号打开工位并开始采集。
+        /// 一台相机只能独占打开一次（官方默认 MV_ACCESS_EXCLUSIVE），两个工位不能填同一个 Vir…。
+        /// </summary>
         public static bool OpenStations()
         {
             lock (Sync)
@@ -162,6 +179,7 @@ namespace WpfApp2.Services
             }
         }
 
+        /// <summary>进程退出时走这里。对照官方 bnClose：先停流再关设备再毁句柄。</summary>
         public static void Shutdown()
         {
             lock (Sync)
@@ -171,6 +189,10 @@ namespace WpfApp2.Services
             }
         }
 
+        /// <summary>
+        /// 一台工位的完整打开：CameraService.Open（CreateHandle→OpenDevice）再 StartGrabbing。
+        /// 对照官方：bnOpen_Click 之后再点 bnStartGrab。失败则立刻 Dispose，避免句柄泄漏。
+        /// </summary>
         private static bool OpenOne(string station, string serial)
         {
             var camera = new CameraService();

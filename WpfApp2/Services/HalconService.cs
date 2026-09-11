@@ -5,7 +5,8 @@ using HalconDotNet;
 namespace WpfApp2.Services
 {
     /// <summary>
-    /// Halcon 练习入口。界面只给 CameraFrame（BGR24 字节），不直接碰 HObject。
+    /// Halcon 练习入口。界面只给 CameraFrame（BGR24 字节），不直接碰 HObject，也不碰海康 CCamera。
+    /// 与海康的交界：CameraService.ConvertPixelType(BGR8_Packed) → 本类 gen_image_interleaved("bgr")。
     /// 流水线：字节 → HImage → 算子 → 再拷回 BGR24，给 WPF Image 用。
     /// HObject 用完必须 Dispose，否则实时点几下内存就会涨。
     /// </summary>
@@ -166,7 +167,8 @@ namespace WpfApp2.Services
         }
 
         /// <summary>
-        /// 海康给的是 packed BGR24。Halcon 用 gen_image_interleaved 按 "bgr" 读进来，内部会拆成 3 个通道。
+        /// 海康链路终点：CameraService.CopyToBgr24 已经 ConvertPixelType 成 PixelType_Gvsp_BGR8_Packed。
+        /// Halcon 用 gen_image_interleaved 按 "bgr" 读进来，内部会拆成 3 个通道。
         /// 指针必须钉住，否则 GC 一搬数组，Halcon 就读到野指针。
         /// </summary>
         private static bool TryCreateImage(CameraFrame frame, out HObject image)
@@ -213,8 +215,7 @@ namespace WpfApp2.Services
         private static bool TryAsGray(HObject image, out HObject gray)
         {
             gray = null;
-            HTuple channels;
-            HOperatorSet.CountChannels(image, out channels);
+            HOperatorSet.CountChannels(image, out HTuple channels);
             if (channels.I == 1)
             {
                 HOperatorSet.CopyImage(image, out gray);
@@ -282,10 +283,7 @@ namespace WpfApp2.Services
 
         private static void DisposeObj(HObject obj)
         {
-            if (obj != null)
-            {
-                obj.Dispose();
-            }
+            obj?.Dispose();
         }
 
         private static bool Fail(string message)

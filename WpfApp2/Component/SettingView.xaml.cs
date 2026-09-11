@@ -11,7 +11,11 @@ using WpfApp2.Services;
 namespace WpfApp2.Component
 {
     /// <summary>
-    /// SettingView.xaml 的交互逻辑
+    /// 设置页。海康链路在界面上的对照（官方 BasicDemo 按钮 → 本页）：
+    /// 刷新设备 ≈ bnEnum；打开工位 ≈ bnOpen + bnStartGrab；
+    /// 预览循环 ≈ ReceiveThreadProcess（拉模式 GetImageBuffer）；
+    /// 抓图存 BMP ≈ bnSaveBmp；关闭全部 ≈ bnClose。
+    /// 界面不直接碰 CCamera，一律经 CameraHub。
     /// </summary>
     public partial class SettingView : UserControl
     {
@@ -69,6 +73,7 @@ namespace WpfApp2.Component
             }
         }
 
+        /// <summary>对照 BasicDemo.bnEnum_Click：只 EnumDevices，不 Open。</summary>
         private void RefreshDevices_Click(object sender, RoutedEventArgs e)
         {
             var list = CameraHub.Enumerate();
@@ -106,6 +111,7 @@ namespace WpfApp2.Component
             box.Text = info.Serial;
         }
 
+        /// <summary>对照官方连点 bnOpen、bnStartGrab。按序列号打开外观/码面两台并开始采集。</summary>
         private void OpenStations_Click(object sender, RoutedEventArgs e)
         {
             ApplyCameraSerialsToSpec();
@@ -219,6 +225,7 @@ namespace WpfApp2.Component
             await GrabAsync(CameraHub.Code);
         }
 
+        /// <summary>对照 BasicDemo.bnClose_Click。</summary>
         private void CloseStations_Click(object sender, RoutedEventArgs e)
         {
             StopPreview();
@@ -226,6 +233,7 @@ namespace WpfApp2.Component
             SetStatus("已关闭全部相机。");
         }
 
+        /// <summary>拉一帧 BGR24，交给 Halcon。底层仍是 GetImageBuffer + ConvertPixelType。</summary>
         private async Task<CameraFrame> GrabStationFrameAsync(string station)
         {
             CameraService camera = CameraHub.Get(station);
@@ -246,6 +254,7 @@ namespace WpfApp2.Component
             return frame;
         }
 
+        /// <summary>对照 BasicDemo.bnSaveBmp_Click：GetImageBuffer 后 SaveImageToFile。</summary>
         private async Task GrabAsync(string station)
         {
             CameraService camera = CameraHub.Get(station);
@@ -287,6 +296,10 @@ namespace WpfApp2.Component
             _previewCts = null;
         }
 
+        /// <summary>
+        /// 对照 BasicDemo.ReceiveThreadProcess：循环 GetImageBuffer。
+        /// 官方用 DisplayOneFrame 画到 PictureBox；WPF 没有这套 HWND 接口，所以转 BitmapSource。
+        /// </summary>
         private void PreviewLoop(string station, Image target, CancellationToken token)
         {
             while (!token.IsCancellationRequested)
@@ -315,6 +328,9 @@ namespace WpfApp2.Component
             }
         }
 
+        /// <summary>
+        /// 海康 BGR8_Packed → WPF BitmapSource。stride = Width * 3，没有 BMP 那种 4 字节行对齐。
+        /// </summary>
         private static BitmapSource ToBitmap(CameraFrame frame)
         {
             var bitmap = new WriteableBitmap(frame.Width, frame.Height, 96, 96, PixelFormats.Bgr24, null);
