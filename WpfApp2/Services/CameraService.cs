@@ -21,13 +21,17 @@ namespace WpfApp2.Services
     ///
     /// 取流方式：我们用拉模式 GetImageBuffer（对照 BasicDemo.ReceiveThreadProcess），
     /// 不用 Grab_Callback 的 RegisterImageCallBackEx。
+    /// 预览循环是唯一的 GetImageBuffer 调用方；Halcon 只拷贝缓存的最新帧，不再取流。
     /// 由 CameraHub 创建和关闭，界面不要直接 Dispose。
     /// </summary>
     public sealed class CameraService : IDisposable
     {
         private readonly object _gate = new object();
+        /// <summary>只保护最新预览帧指针。与 <c>_gate</c> 分开，Halcon 拷贝时不跟 GetImageBuffer 抢锁。</summary>
+        private readonly object _latestGate = new object();
         /// <summary>官方 Demo 里的 m_MyCamera。一个 CCamera = 一个设备句柄。</summary>
         private readonly CCamera _device = new CCamera();
+        private CameraFrame _latest;
         private bool _handleCreated;
         private uint _layerType;
 
@@ -83,13 +87,10 @@ namespace WpfApp2.Services
                     }
                 }
 
-                // 官方 Demo 没有这一步。提前问「独占可达」，避免 CreateHandle 成功但 OpenDevice 才报 MV_E_ACCESS_DENIED。
+                // 官方 Demo 没有 IsDeviceAccessible。虚拟相机驱动常把「上次没关干净」记成独占，
+                // 查询结果不可靠：true 也可能 Open 失败，false 也可能其实能开。只打日志，真正以 OpenDevice 为准。
                 bool exclusiveOk = CSystem.IsDeviceAccessible(ref selected, MV_ACCESS_MODE.MV_ACCESS_EXCLUSIVE);
                 AppLog.Info("准备打开 " + serial + "  独占可达=" + exclusiveOk);
-                if (!exclusiveOk)
-                {
-                    return Fail("相机 " + serial + " 正被占用。若两个工位填了同一序列号，只留一台；否则在 MVS 里对该设备点「断开」。");
-                }
 
                 // 创建设备句柄。还没跟相机通信，只是把枚举信息绑到 CCamera 上。
                 nRet = _device.CreateHandle(ref selected);
@@ -101,13 +102,21 @@ namespace WpfApp2.Services
                 _handleCreated = true;
                 _layerType = selected.nTLayerType;
 
-                // 真正占用设备。默认独占。USB 虚拟机忽略 AccessMode 参数，被占用时只能断开对方。
+                // 真正占用设备。默认独占。上次进程没 DestroyHandle 时驱动会一直占着，
+                // 任务管理器里已经看不到 exe。先按官方 OpenDevice()，失败再用 WithSwitch 抢一次。
                 nRet = _device.OpenDevice();
+                if (nRet == CErrorDefine.MV_E_ACCESS_DENIED)
+                {
+                    AppLog.Warn("OpenDevice 独占失败，改用 ExclusiveWithSwitch 再试 " + serial);
+                    nRet = _device.OpenDevice((uint)MV_ACCESS_MODE.MV_ACCESS_EXCLUSIVEWITHSWITCH, 0);
+                }
+
                 if (nRet != CErrorDefine.MV_OK)
                 {
                     _device.DestroyHandle();
                     _handleCreated = false;
-                    return Fail("OpenDevice 失败 " + HikSdk.FormatError(nRet) + "。相机 " + serial + " 可能被 MVS Client 或其他程序占用。");
+                    return Fail("OpenDevice 失败 " + HikSdk.FormatError(nRet)
+                        + "。打开「虚拟相机工具」，把 " + serial + " 先离线再上线；工具要开着，MVS 主程序不要取流。");
                 }
 
                 // 对照 Grab_Callback：只对真 GigE 调最佳包长。虚拟 USB / 虚拟 GigE 跳过。
@@ -221,9 +230,9 @@ namespace WpfApp2.Services
         }
 
         /// <summary>
-        /// 取一帧并转成 BGR24 拷贝。给 WPF Image / Halcon 用。
-        /// 对照 BasicDemo.ReceiveThreadProcess：GetImageBuffer → ConvertPixelType(BGR8_Packed) → 拷走 → FreeImageBuffer。
-        /// 官方 Demo 还会 DisplayOneFrame（WinForms HWND）；WPF 没有 HWND 显示接口，所以自己转 BitmapSource。
+        /// 取一帧并转成 BGR24 拷贝。只给预览循环用（对照 BasicDemo.ReceiveThreadProcess）。
+        /// GetImageBuffer → ConvertPixelType(BGR8_Packed) → 拷走 → FreeImageBuffer，并更新最新帧缓存。
+        /// Halcon 不要调这个，走 <see cref="TryCloneLatestFrame"/>，避免第二条拉流跟预览抢同一台 CCamera。
         /// 超时不算异常，预览循环会一直重试。
         /// </summary>
         public bool TryGrabFrame(out CameraFrame frame, int timeoutMs = 400)
@@ -240,13 +249,41 @@ namespace WpfApp2.Services
 
                 try
                 {
-                    return CopyToBgr24(raw.Image, out frame);
+                    if (!CopyToBgr24(raw.Image, out frame))
+                    {
+                        return false;
+                    }
+
+                    PublishLatest(frame);
+                    return true;
                 }
                 finally
                 {
                     _device.FreeImageBuffer(ref raw);
                 }
             }
+        }
+
+        /// <summary>
+        /// 拷贝预览缓存的最新一帧。对照官方存图：用接收线程已经拿到的图，不再 GetImageBuffer。
+        /// 没有预览过则失败。停预览后仍可处理最后一帧。
+        /// </summary>
+        public bool TryCloneLatestFrame(out CameraFrame frame)
+        {
+            CameraFrame snapshot;
+            lock (_latestGate)
+            {
+                snapshot = _latest;
+            }
+
+            if (snapshot == null || snapshot.Bgr24 == null || snapshot.Width <= 0 || snapshot.Height <= 0)
+            {
+                frame = null;
+                return Fail("还没有预览帧。请先打开工位并开始预览。");
+            }
+
+            frame = snapshot.Clone();
+            return true;
         }
 
         public void Close()
@@ -265,33 +302,64 @@ namespace WpfApp2.Services
         /// <summary>
         /// 对照官方关闭顺序：StopGrabbing → CloseDevice → DestroyHandle。
         /// 顺序不能反：先毁句柄再关设备会 MV_E_HANDLE。
+        /// 每一步失败也继续往下走，避免 StopGrabbing 失败后句柄一直占着。
         /// </summary>
         private void CloseCore()
         {
-            if (IsGrabbing)
+            string serial = Serial;
+            try
             {
-                _device.StopGrabbing();
-                IsGrabbing = false;
-            }
+                if (IsGrabbing)
+                {
+                    int nRet = _device.StopGrabbing();
+                    if (nRet != CErrorDefine.MV_OK)
+                    {
+                        AppLog.Warn("StopGrabbing 失败 " + HikSdk.FormatError(nRet));
+                    }
 
-            if (IsOpen)
+                    IsGrabbing = false;
+                }
+
+                if (IsOpen)
+                {
+                    int nRet = _device.CloseDevice();
+                    if (nRet != CErrorDefine.MV_OK)
+                    {
+                        AppLog.Warn("CloseDevice 失败 " + HikSdk.FormatError(nRet));
+                    }
+
+                    IsOpen = false;
+                }
+            }
+            finally
             {
-                _device.CloseDevice();
-                IsOpen = false;
-            }
+                if (_handleCreated)
+                {
+                    int nRet = _device.DestroyHandle();
+                    if (nRet != CErrorDefine.MV_OK)
+                    {
+                        AppLog.Warn("DestroyHandle 失败 " + HikSdk.FormatError(nRet));
+                    }
 
-            if (_handleCreated)
+                    _handleCreated = false;
+                }
+
+                if (!string.IsNullOrEmpty(serial))
+                {
+                    AppLog.Info("已关闭相机 " + serial);
+                }
+
+                Serial = null;
+                PublishLatest(null);
+            }
+        }
+
+        private void PublishLatest(CameraFrame frame)
+        {
+            lock (_latestGate)
             {
-                _device.DestroyHandle();
-                _handleCreated = false;
+                _latest = frame;
             }
-
-            if (!string.IsNullOrEmpty(Serial))
-            {
-                AppLog.Info("已关闭相机 " + Serial);
-            }
-
-            Serial = null;
         }
 
         /// <summary>

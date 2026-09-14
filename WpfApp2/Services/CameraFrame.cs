@@ -1,3 +1,5 @@
+using System;
+
 namespace WpfApp2.Services
 {
     /// <summary>
@@ -10,5 +12,23 @@ namespace WpfApp2.Services
         public int Width { get; set; }
         public int Height { get; set; }
         public byte[] Bgr24 { get; set; }
+
+        /// <summary>像素深拷贝。预览继续持有原帧，Halcon 只处理这份拷贝。</summary>
+        public CameraFrame Clone()
+        {
+            byte[] copy = null;
+            if (Bgr24 != null)
+            {
+                copy = new byte[Bgr24.Length];
+                Buffer.BlockCopy(Bgr24, 0, copy, 0, Bgr24.Length);
+            }
+
+            return new CameraFrame
+            {
+                Width = Width,
+                Height = Height,
+                Bgr24 = copy
+            };
+        }
     }
 }

@@ -20,6 +20,9 @@ namespace WpfApp2.Component
     public partial class SettingView : UserControl
     {
         private CancellationTokenSource _previewCts;
+        private Task _appearancePreviewTask;
+        private Task _codePreviewTask;
+        private bool _openingStations;
 
         private MainViewModel Vm
         {
@@ -112,19 +115,39 @@ namespace WpfApp2.Component
         }
 
         /// <summary>对照官方连点 bnOpen、bnStartGrab。按序列号打开外观/码面两台并开始采集。</summary>
-        private void OpenStations_Click(object sender, RoutedEventArgs e)
+        private async void OpenStations_Click(object sender, RoutedEventArgs e)
         {
-            ApplyCameraSerialsToSpec();
-            StopPreview();
-            bool ok = CameraHub.OpenStations();
-            if (!ok)
+            if (_openingStations)
             {
-                SetStatus(CameraHub.LastError ?? "打开失败。");
                 return;
             }
 
-            StartPreview();
-            SetStatus("工位已打开，正在预览。");
+            ApplyCameraSerialsToSpec();
+            StopPreview();
+            _openingStations = true;
+            SetStatus("正在打开工位…");
+            try
+            {
+                // 只把 SDK 打开丢进线程池。SetStatus / StartPreview 会碰界面，必须 await 回来再做。
+                bool ok = await Task.Run(() => CameraHub.OpenStations());
+                if (!ok)
+                {
+                    SetStatus(CameraHub.LastError ?? "打开失败。");
+                    return;
+                }
+
+                StartPreview();
+                SetStatus("工位已打开，正在预览。");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("打开工位异常", ex);
+                SetStatus("打开工位失败，见日志。");
+            }
+            finally
+            {
+                _openingStations = false;
+            }
         }
 
         private void StartPreview_Click(object sender, RoutedEventArgs e)
@@ -189,9 +212,8 @@ namespace WpfApp2.Component
 
         private async void AppearanceThreshold_Click(object sender, RoutedEventArgs e)
         {
-            int minGray;
             int maxGray;
-            if (!int.TryParse(ThresholdMinBox.Text, out minGray) || !int.TryParse(ThresholdMaxBox.Text, out maxGray))
+            if (!int.TryParse(ThresholdMinBox.Text, out int minGray) || !int.TryParse(ThresholdMaxBox.Text, out maxGray))
             {
                 SetStatus("阈值请填 0～255 的整数。");
                 return;
@@ -228,12 +250,21 @@ namespace WpfApp2.Component
         /// <summary>对照 BasicDemo.bnClose_Click。</summary>
         private void CloseStations_Click(object sender, RoutedEventArgs e)
         {
-            StopPreview();
-            CameraHub.CloseAll();
+            ReleaseHardware();
             SetStatus("已关闭全部相机。");
         }
 
-        /// <summary>拉一帧 BGR24，交给 Halcon。底层仍是 GetImageBuffer + ConvertPixelType。</summary>
+        /// <summary>
+        /// 先等预览线程离开 GetImageBuffer，再 StopGrabbing / CloseDevice / DestroyHandle。
+        /// 关窗口和「关闭全部」都走这里，避免句柄还在预览里、下一轮 Open 报占用。
+        /// </summary>
+        internal void ReleaseHardware()
+        {
+            StopPreview();
+            CameraHub.CloseAll();
+        }
+
+        /// <summary>拷贝预览缓存的最新帧给 Halcon。不再 GetImageBuffer。</summary>
         private async Task<CameraFrame> GrabStationFrameAsync(string station)
         {
             CameraService camera = CameraHub.Get(station);
@@ -244,10 +275,20 @@ namespace WpfApp2.Component
             }
 
             CameraFrame frame = null;
-            bool ok = await Task.Run(() => camera.TryGrabFrame(out frame, 1000));
+            string error = null;
+            bool ok = await Task.Run(() =>
+            {
+                bool result = camera.TryCloneLatestFrame(out frame);
+                if (!result)
+                {
+                    error = camera.LastError;
+                }
+
+                return result;
+            });
             if (!ok || frame == null)
             {
-                SetStatus(camera.LastError ?? "取图失败。");
+                SetStatus(error ?? "还没有预览帧。");
                 return null;
             }
 
@@ -280,8 +321,8 @@ namespace WpfApp2.Component
             StopPreview();
             _previewCts = new CancellationTokenSource();
             CancellationToken token = _previewCts.Token;
-            Task.Run(() => PreviewLoop(CameraHub.Appearance, AppearancePreview, token));
-            Task.Run(() => PreviewLoop(CameraHub.Code, CodePreview, token));
+            _appearancePreviewTask = Task.Run(() => PreviewLoop(CameraHub.Appearance, AppearancePreview, token));
+            _codePreviewTask = Task.Run(() => PreviewLoop(CameraHub.Code, CodePreview, token));
         }
 
         private void StopPreview()
@@ -292,39 +333,83 @@ namespace WpfApp2.Component
             }
 
             _previewCts.Cancel();
+            WaitPreviewExit();
             _previewCts.Dispose();
             _previewCts = null;
+            _appearancePreviewTask = null;
+            _codePreviewTask = null;
+        }
+
+        /// <summary>GetImageBuffer 最多堵约 400ms，这里多等一会让循环自己退出，再关设备。</summary>
+        private void WaitPreviewExit()
+        {
+            Task appearance = _appearancePreviewTask;
+            Task code = _codePreviewTask;
+            try
+            {
+                if (appearance != null && code != null)
+                {
+                    Task.WaitAll(new[] { appearance, code }, 1000);
+                }
+                else if (appearance != null)
+                {
+                    appearance.Wait(1000);
+                }
+                else if (code != null)
+                {
+                    code.Wait(1000);
+                }
+            }
+            catch (AggregateException)
+            {
+            }
         }
 
         /// <summary>
-        /// 对照 BasicDemo.ReceiveThreadProcess：循环 GetImageBuffer。
+        /// 对照 BasicDemo.ReceiveThreadProcess：循环 GetImageBuffer，并写入最新帧缓存。
         /// 官方用 DisplayOneFrame 画到 PictureBox；WPF 没有这套 HWND 接口，所以转 BitmapSource。
+        /// 这是外观/码面各自唯一的取流循环，Halcon 不再另开 GetImageBuffer。
         /// </summary>
         private void PreviewLoop(string station, Image target, CancellationToken token)
         {
-            while (!token.IsCancellationRequested)
+            try
             {
-                CameraService camera = CameraHub.Get(station);
-                if (camera == null)
+                while (!token.IsCancellationRequested)
                 {
-                    Thread.Sleep(200);
-                    continue;
-                }
-
-                CameraFrame frame;
-                if (!camera.TryGrabFrame(out frame, 400))
-                {
-                    continue;
-                }
-
-                // BeginInvoke：不要 Invoke，否则关预览时会和 UI 线程互相等。
-                target.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (!token.IsCancellationRequested)
+                    CameraService camera = CameraHub.Get(station);
+                    if (camera == null)
                     {
-                        target.Source = ToBitmap(frame);
+                        Thread.Sleep(200);
+                        continue;
                     }
-                }));
+
+                    CameraFrame frame;
+                    if (!camera.TryGrabFrame(out frame, 400))
+                    {
+                        continue;
+                    }
+
+                    // BeginInvoke：不要 Invoke，否则关预览时会和 UI 线程互相等。
+                    target.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            if (!token.IsCancellationRequested)
+                            {
+                                target.Source = ToBitmap(frame);
+                            }
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                        }
+                    }));
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (OperationCanceledException)
+            {
             }
         }
 

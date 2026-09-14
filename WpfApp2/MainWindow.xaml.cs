@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 using WpfApp2.Component;
 
@@ -17,7 +18,17 @@ namespace WpfApp2
         {
             InitializeComponent();
             DataContext = _vm;
+            Closing += MainWindow_Closing;
             ShowPage(_judgeView, JudgeNavButton);
+        }
+
+        /// <summary>
+        /// 关窗时先停预览再关设备。OnExit 太晚：预览可能还堵在 GetImageBuffer，
+        /// VS 点停止调试时 OnExit 还经常不跑，虚拟相机会一直被占着。
+        /// </summary>
+        private void MainWindow_Closing(object sender, CancelEventArgs e)
+        {
+            _settingView.ReleaseHardware();
         }
 
         private void JudgeNavButton_Click(object sender, RoutedEventArgs e)

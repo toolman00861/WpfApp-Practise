@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using HalconDotNet;
 
@@ -6,15 +7,21 @@ namespace WpfApp2.Services
 {
     /// <summary>
     /// Halcon 练习入口。界面只给 CameraFrame（BGR24 字节），不直接碰 HObject，也不碰海康 CCamera。
-    /// 与海康的交界：CameraService.ConvertPixelType(BGR8_Packed) → 本类 gen_image_interleaved("bgr")。
+    /// 与海康的交界：预览已 ConvertPixelType(BGR8_Packed) 并缓存；本类只吃那份 BGR24 拷贝，gen_image_interleaved("bgr")。
     /// 流水线：字节 → HImage → 算子 → 再拷回 BGR24，给 WPF Image 用。
     /// HObject 用完必须 Dispose，否则实时点几下内存就会涨。
     /// </summary>
     public static class HalconService
     {
+        private const string DefaultRoot = @"C:\Program Files\MVTec\HALCON-17.12-Progress";
         private static readonly object Sync = new object();
 
         public static string LastError { get; private set; }
+
+        static HalconService()
+        {
+            EnsureNativePath();
+        }
 
         /// <summary>只探活、记版本，不占相机。</summary>
         public static void Init()
@@ -24,6 +31,7 @@ namespace WpfApp2.Services
                 LastError = null;
                 try
                 {
+                    EnsureNativePath();
                     HTuple version;
                     HOperatorSet.GetSystem("version", out version);
                     AppLog.Info("Halcon " + version.S);
@@ -34,6 +42,41 @@ namespace WpfApp2.Services
                     AppLog.Error("Halcon 初始化失败（未安装、位数不匹配或没有许可）", ex);
                 }
             }
+        }
+
+        /// <summary>
+        /// 把 HALCON 的 bin\&lt;arch&gt; 插到进程 PATH 最前，必须在第一次 P/Invoke 之前。
+        /// 安装器常把 PATH 写成 ...\bin\%HALCONARCH%，Windows 不会展开，于是找不到 halconxl.dll。
+        /// </summary>
+        private static void EnsureNativePath()
+        {
+            string root = Environment.GetEnvironmentVariable("HALCONROOT");
+            if (string.IsNullOrEmpty(root))
+            {
+                root = DefaultRoot;
+                Environment.SetEnvironmentVariable("HALCONROOT", root);
+            }
+
+            string arch = Environment.GetEnvironmentVariable("HALCONARCH");
+            if (string.IsNullOrEmpty(arch))
+            {
+                arch = Environment.Is64BitProcess ? "x64-win64" : "x86sse2-win32";
+                Environment.SetEnvironmentVariable("HALCONARCH", arch);
+            }
+
+            string bin = Path.Combine(root, "bin", arch);
+            if (!Directory.Exists(bin))
+            {
+                return;
+            }
+
+            string path = Environment.GetEnvironmentVariable("PATH") ?? "";
+            if (path.IndexOf(bin, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return;
+            }
+
+            Environment.SetEnvironmentVariable("PATH", bin + Path.PathSeparator + path);
         }
 
         /// <summary>彩色图转灰度。结果仍是 BGR24，三个通道同一套灰值，WPF 才能直接显示。</summary>
@@ -62,6 +105,14 @@ namespace WpfApp2.Services
                 catch (HOperatorException ex)
                 {
                     return Fail("转灰度失败：" + ex.Message);
+                }
+                catch (DllNotFoundException ex)
+                {
+                    return Fail(NativeLoadError(ex));
+                }
+                catch (BadImageFormatException ex)
+                {
+                    return Fail(NativeLoadError(ex));
                 }
                 finally
                 {
@@ -96,9 +147,7 @@ namespace WpfApp2.Services
                         return false;
                     }
 
-                    HTuple hvMean;
-                    HTuple hvDeviation;
-                    HOperatorSet.Intensity(gray, gray, out hvMean, out hvDeviation);
+                    HOperatorSet.Intensity(gray, gray, out HTuple hvMean, out HTuple hvDeviation);
                     mean = hvMean.D;
                     deviation = hvDeviation.D;
                     return TryToBgrFrame(gray, out output);
@@ -106,6 +155,14 @@ namespace WpfApp2.Services
                 catch (HOperatorException ex)
                 {
                     return Fail("测亮度失败：" + ex.Message);
+                }
+                catch (DllNotFoundException ex)
+                {
+                    return Fail(NativeLoadError(ex));
+                }
+                catch (BadImageFormatException ex)
+                {
+                    return Fail(NativeLoadError(ex));
                 }
                 finally
                 {
@@ -145,16 +202,22 @@ namespace WpfApp2.Services
                         return false;
                     }
 
-                    HTuple width;
-                    HTuple height;
-                    HOperatorSet.GetImageSize(gray, out width, out height);
+                    HOperatorSet.GetImageSize(gray, out HTuple width, out HTuple height);
                     HOperatorSet.Threshold(gray, out region, minGray, maxGray);
-                    HOperatorSet.RegionToBin(region, out binary, 255, 0, width, height);
+                    HOperatorSet.RegionToBin(region, out binary, 255, 0,width, height);
                     return TryToBgrFrame(binary, out output);
                 }
                 catch (HOperatorException ex)
                 {
                     return Fail("二值化失败：" + ex.Message);
+                }
+                catch (DllNotFoundException ex)
+                {
+                    return Fail(NativeLoadError(ex));
+                }
+                catch (BadImageFormatException ex)
+                {
+                    return Fail(NativeLoadError(ex));
                 }
                 finally
                 {
@@ -233,6 +296,7 @@ namespace WpfApp2.Services
 
         /// <summary>
         /// 统一吐 BGR24。灰度会先 compose3 成假彩色，再 interleave_channels 拉成与 CameraFrame 相同的内存布局。
+        /// HALCON 17.12 签名是 (PixelFormat, RowBytes, Alpha)；RowBytes 用 "match" 表示不补齐，每行正好宽×3。
         /// GetImagePointer1 的指针只在这个 HObject 活着时有效，所以这里立刻拷走。
         /// </summary>
         private static bool TryToBgrFrame(HObject image, out CameraFrame frame)
@@ -255,7 +319,7 @@ namespace WpfApp2.Services
                     rgb = color;
                 }
 
-                HOperatorSet.InterleaveChannels(rgb, out interleaved, "bgr", 0, 0);
+                HOperatorSet.InterleaveChannels(rgb, out interleaved, "bgr", "match", 255);
 
                 HTuple pointer;
                 HTuple type;
@@ -284,6 +348,13 @@ namespace WpfApp2.Services
         private static void DisposeObj(HObject obj)
         {
             obj?.Dispose();
+        }
+
+        private static string NativeLoadError(Exception ex)
+        {
+            return "无法加载 halconxl.dll。HALCON 的 bin\\"
+                + (Environment.Is64BitProcess ? "x64-win64" : "x86sse2-win32")
+                + " 不在 PATH 中，或进程位数不匹配。" + ex.Message;
         }
 
         private static bool Fail(string message)

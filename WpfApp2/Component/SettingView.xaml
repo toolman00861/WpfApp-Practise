@@ -137,7 +137,7 @@
             <TextBlock Margin="0,6,0,0"
                        Foreground="Gray"
                        TextWrapping="Wrap"
-                       Text="先打开外观工位。点按钮会新抓一帧，交给 Halcon 处理后显示在下方，不打断左边预览。"/>
+                       Text="先打开外观工位并预览。点按钮会拷贝当前预览帧交给 Halcon，不打断左边预览、也不再向相机取流。"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                 <TextBlock Text="二值化下限"
