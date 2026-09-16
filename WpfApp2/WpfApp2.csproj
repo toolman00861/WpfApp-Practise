@@ -42,6 +42,9 @@
     <Reference Include="halcondotnetxl">
       <HintPath>..\..\..\..\..\..\Program Files\MVTec\HALCON-17.12-Progress\bin\dotnet35\halcondotnetxl.dll</HintPath>
     </Reference>
+    <Reference Include="HslCommunication, Version=13.0.0.0, Culture=neutral, PublicKeyToken=3d72ad3b6b5ec0e3, processorArchitecture=MSIL">
+      <HintPath>..\packages\HslCommunication.13.0.0\lib\net451\HslCommunication.dll</HintPath>
+    </Reference>
     <Reference Include="MvCamCtrl.Net">
       <HintPath>C:\Program Files (x86)\MVS\Development\DotNet\AnyCpu\MvCamCtrl.Net.dll</HintPath>
       <Private>True</Private>
@@ -107,10 +110,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Component\HSLTest.xaml.cs">
+      <DependentUpon>HSLTest.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Component\SettingView.xaml.cs">
       <DependentUpon>SettingView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Model\VoltageSpec.cs" />
+    <Compile Include="Services\HslService.cs" />
     <Compile Include="Services\SpecStore.cs" />
     <Compile Include="Services\AppLog.cs" />
     <Compile Include="Services\CameraInfo.cs" />
@@ -120,6 +127,10 @@
     <Compile Include="Services\CameraHub.cs" />
     <Compile Include="Services\HalconService.cs" />
     <Compile Include="Database\Db.cs" />
+    <Page Include="Component\HSLTest.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Component\SettingView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using WpfApp2.Component;
+using WpfApp2.Services;
 
 namespace WpfApp2
 {
@@ -13,6 +14,8 @@ namespace WpfApp2
         private readonly JudgeView _judgeView = new JudgeView();
         private readonly RecordView _recordView = new RecordView();
         private readonly SettingView _settingView = new SettingView();
+        // 和设置页一样只 new 一次。握手状态在 HslService 静态字段里，换页不会丢。
+        private readonly HSLTest _hslView = new HSLTest();
 
         public MainWindow()
         {
@@ -29,6 +32,8 @@ namespace WpfApp2
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
             _settingView.ReleaseHardware();
+            // 握手循环可能还在 Sleep/读线圈，关窗先停它再 Dispose 客户端。
+            HslService.Shutdown();
         }
 
         private void JudgeNavButton_Click(object sender, RoutedEventArgs e)
@@ -47,12 +52,19 @@ namespace WpfApp2
             JudgeNavButton.FontWeight = FontWeights.Normal;
             RecordNavButton.FontWeight = FontWeights.Normal;
             SettingNavButton.FontWeight = FontWeights.Normal;
+            HslNavButton.FontWeight = FontWeights.Normal;
             activeButton.FontWeight = FontWeights.SemiBold;
         }
 
         private void SettingNavButton_Click(object sender, RoutedEventArgs e)
         {
             ShowPage(_settingView, SettingNavButton);
+        }
+
+        /// <summary>切到 HSL 练习页。控件复用，不重新 new。</summary>
+        private void HslNavButton_Click(object sender, RoutedEventArgs e)
+        {
+            ShowPage(_hslView, HslNavButton);
         }
     }
 }

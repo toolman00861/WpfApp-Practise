@@ -1,0 +1,62 @@
+﻿<UserControl x:Class="WpfApp2.Component.HSLTest"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.org/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="450"
+             d:DesignWidth="800">
+    <!--
+        练习 22 的界面。按钮只调 HslService，不 new ModbusTcpNet。
+        对照设置页：那边经 CameraHub 开相机，这边经 HslService 连 Demo。
+        Click 名字和 HSLTest.xaml.cs 里的方法一一对应。
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,16">
+            <TextBlock Text="HSL 握手练习"
+                       FontSize="24"
+                       FontWeight="SemiBold"/>
+            <TextBlock Margin="0,8,0,0"
+                       Foreground="Gray"
+                       TextWrapping="Wrap"
+                       Text="练习 22：连 Demo 服务器 127.0.0.1:502。你在服务器拨线圈 0（请检测），本机写 1/2/3。不接相机与 Halcon。"/>
+
+            <!-- 使用顺序：连接 → 开始握手 → 去 Demo 拨线圈 0 → 看阶段和四个格子 → 把 0 清掉 → 一圈结束 -->
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <Button Content="连接"
+                        Padding="16,6"
+                        Click="Connect_Click"/>
+                <Button Content="断开"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="Disconnect_Click"/>
+                <Button Content="开始握手"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="StartHandshake_Click"/>
+                <Button Content="停止握手"
+                        Padding="16,6"
+                        Margin="8,0,0,0"
+                        Click="StopHandshake_Click"/>
+            </StackPanel>
+
+            <!-- 握手循环通过 OnPhase 改这段字；定时器也会同步 HslService.Phase -->
+            <TextBlock x:Name="PhaseText"
+                       Margin="0,16,0,0"
+                       FontSize="16"
+                       Text="阶段：未连接"/>
+
+            <!-- 四个格子只是显示。写线圈发生在 HslService.HandshakeLoop，不在本页 -->
+            <TextBlock Margin="0,16,0,4" FontWeight="SemiBold" Text="四个线圈"/>
+            <TextBlock x:Name="Coil0Text" Text="0 请检测 = ?"/>
+            <TextBlock x:Name="Coil1Text" Text="1 检测中 = ?"/>
+            <TextBlock x:Name="Coil2Text" Text="2 结果OK = ?"/>
+            <TextBlock x:Name="Coil3Text" Text="3 完成 = ?"/>
+
+            <TextBlock Margin="0,16,0,0"
+                       Foreground="Gray"
+                       TextWrapping="Wrap"
+                       Text="跑一圈：拨 0=1 → 本机写 1 → 假装检测 500ms → 写 2、3 → 你把 0 清掉 → 本机清 1/2/3。若 0 一直为 1，会停在「等 PLC 清请检测」。"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

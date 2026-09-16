@@ -38,6 +38,12 @@
                     Padding="16,6"
                     Margin="8,0,0,0"
                     Click="SettingNavButton_Click"/>
+            <!-- 练习 22：Modbus 握手。页是 HSLTest，逻辑在 HslService。 -->
+            <Button x:Name="HslNavButton"
+                    Content="HSL 练习"
+                    Padding="16,6"
+                    Margin="8,0,0,0"
+                    Click="HslNavButton_Click"/>
         </StackPanel>
 
         <!-- 换页容器：同一时刻只显示一个 UserControl -->

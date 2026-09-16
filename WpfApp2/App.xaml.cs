@@ -22,12 +22,16 @@ namespace WpfApp2
             // 海康链路入口：只读 SDK 版本，不枚举、不占相机。真正 Open 在设置页点「打开工位」。
             CameraHub.Init();
             HalconService.Init();
+            // 只 new ModbusTcpNet，不连 502。真正 Connect 在「HSL 练习」页点「连接」。
+            HslService.Init();
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
             // 对照官方 bnClose：StopGrabbing → CloseDevice → DestroyHandle，避免退出后虚拟相机仍被占用。
             CameraHub.Shutdown();
+            // 停握手循环再关 TCP。关窗时 MainWindow_Closing 也会调一次，重复调用是安全的。
+            HslService.Shutdown();
             AppLog.Info("程序退出");
             base.OnExit(e);
         }
